@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="es" class="h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="description" content="Sistema de gestión comercial: inventario, compras, ventas, créditos y facturación." />
+    <!-- El título real lo fija la aplicación con el nombre comercial de la empresa
+         (white-label): aquí solo hay un valor neutro para el primer pintado. -->
+    <title>Inventra</title>
+    <script>
+      // El tema se aplica antes del primer pintado para que no haya un destello
+      // blanco al recargar en modo oscuro.
+      (function () {
+        try {
+          var stored = localStorage.getItem('inventra.theme');
+          var dark = stored === 'dark' || (!stored && matchMedia('(prefers-color-scheme: dark)').matches);
+          if (dark) document.documentElement.classList.add('dark');
+        } catch (_) {}
+      })();
+    </script>
+  </head>
+  <body class="h-full">
+    <div id="root" class="h-full"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

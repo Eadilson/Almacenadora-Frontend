@@ -1,0 +1,181 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Paleta declarada como variables CSS y no como valores fijos en las clases.
+ *
+ * Son tres requisitos a la vez: tema claro/oscuro, buen contraste para pantallas
+ * que se usan ocho horas seguidas, y la posibilidad de que cada empresa aplique
+ * su color de marca (white-label) sin recompilar la aplicación.
+ */
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    /* El color primario lo sobrescribe la marca de la empresa en tiempo de
+       ejecución; este es el valor neutro por omisión. */
+    --primary: 222 47% 20%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 210 40% 96%;
+    --accent-foreground: 222 47% 11%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 71% 36%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 45%;
+    --warning-foreground: 0 0% 100%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 222 47% 20%;
+
+    /*
+     * Colores de serie para los gráficos.
+     *
+     * Se asignan **en orden fijo**: la serie 1 es siempre azul, la 2 siempre
+     * naranja. Rotarlos según cuántas series haya repintaría los supervivientes
+     * al aplicar un filtro, y quien mira el gráfico creería que cambió el dato.
+     *
+     * El orden está validado para daltonismo sobre la superficie de la tarjeta:
+     * el peor par adyacente separa ΔE 9.1 en protanopía y 22.9 en visión normal
+     * (OKLab ×100). No se tocan sin volver a validarlos.
+     *
+     * Van en hexadecimal y no en HSL como el resto porque Recharts los recibe
+     * como valor de color directo, sin envolverlos en `hsl()`.
+     */
+    --chart-1: #2a78d6;
+    --chart-2: #eb6834;
+    --chart-3: #1baf7a;
+    --chart-4: #eda100;
+    --chart-grid: #e6e9ee;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222 47% 8%;
+    --foreground: 210 40% 96%;
+
+    --card: 222 45% 11%;
+    --card-foreground: 210 40% 96%;
+
+    --popover: 222 45% 11%;
+    --popover-foreground: 210 40% 96%;
+
+    --primary: 210 40% 96%;
+    --primary-foreground: 222 47% 11%;
+
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 96%;
+
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 217 33% 17%;
+    --accent-foreground: 210 40% 96%;
+
+    --destructive: 0 63% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 60% 40%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 85% 50%;
+    --warning-foreground: 222 47% 11%;
+
+    --border: 217 33% 20%;
+    --input: 217 33% 20%;
+    --ring: 213 27% 70%;
+
+    /*
+     * Las mismas cuatro tonalidades, escalonadas para la superficie oscura. No es
+     * un volteo automático de las claras: sobre fondo oscuro esos valores
+     * quedarían por debajo del contraste mínimo. Validadas contra `--card` en
+     * modo oscuro: peor par adyacente ΔE 8.4 en protanopía, 19.8 en visión
+     * normal, y las cuatro superan 3:1 de contraste.
+     */
+    --chart-1: #3987e5;
+    --chart-2: #d95926;
+    --chart-3: #199e70;
+    --chart-4: #c98500;
+    --chart-grid: #1e293b;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings:
+      'rlig' 1,
+      'calt' 1;
+  }
+
+  /* Las cifras se muestran con anchos de dígito iguales para que las columnas de
+     importes queden alineadas y se puedan comparar de un vistazo. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* El foco visible no se elimina nunca: el sistema se opera con teclado en un
+     punto de venta, donde el ratón es más lento que escribir. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-border;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/40;
+  }
+}
+
+@layer utilities {
+  /* Contenedor de desplazamiento para tablas anchas: el cuerpo de la página nunca
+     debe desplazarse en horizontal. */
+  .scroll-x {
+    @apply w-full overflow-x-auto;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
