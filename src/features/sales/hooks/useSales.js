@@ -23,12 +23,25 @@ export function useCustomers(filters = {}) {
 }
 
 /**
- * @param {Record<string, unknown>} filters
+ * @param {string|null} id
  */
-export function useSalesList(filters = {}) {
+export function useCustomer(id) {
+  return useQuery({
+    queryKey: queryKeys.customers.detail(id ?? 'none'),
+    queryFn: () => salesApi.getCustomer(/** @type {string} */ (id)),
+    enabled: Boolean(id),
+  });
+}
+
+/**
+ * @param {Record<string, unknown>} filters
+ * @param {{ enabled?: boolean }} [options]
+ */
+export function useSalesList(filters = {}, { enabled = true } = {}) {
   return useQuery({
     queryKey: queryKeys.sales.list(filters),
     queryFn: () => salesApi.listSales(filters),
+    enabled,
     placeholderData: (previous) => previous,
   });
 }
@@ -46,11 +59,13 @@ export function useSale(id) {
 
 /**
  * @param {Record<string, unknown>} filters
+ * @param {{ enabled?: boolean }} [options]
  */
-export function useSalesSummary(filters = {}) {
+export function useSalesSummary(filters = {}, { enabled = true } = {}) {
   return useQuery({
     queryKey: [...queryKeys.sales.all, 'summary', filters],
     queryFn: () => salesApi.summary(filters),
+    enabled,
   });
 }
 

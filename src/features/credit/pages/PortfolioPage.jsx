@@ -1,12 +1,16 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, Search, Wallet } from 'lucide-react';
+import { AlertTriangle, CreditCard, HandCoins, Search, Users, Wallet } from 'lucide-react';
 import { Input } from '@/components/ui/input.jsx';
 import { Select } from '@/components/ui/select.jsx';
 import { Badge } from '@/components/ui/badge.jsx';
 import { Button } from '@/components/ui/button.jsx';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card.jsx';
+import { PageHeader } from '@/components/ui/page-header.jsx';
+import { StatCard } from '@/components/ui/stat-card.jsx';
 import { DataTable } from '@/components/data/DataTable.jsx';
+import { Pagination } from '@/components/data/Pagination.jsx';
+import { AgingBars } from '@/components/charts/AgingBars.jsx';
 import { useDebounced } from '@/hooks/useDebounced';
 import { formatMoney } from '@/lib/money';
 import { formatDate } from '@/lib/format';
@@ -98,13 +102,30 @@ export function PortfolioPage() {
     },
     {
       key: 'oldestDueDate',
-      header: 'Vencido desde',
-      render: (/** @type {any} */ row) =>
-        row.oldestDueDate ? (
-          formatDate(row.oldestDueDate)
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        ),
+      header: 'Vencimiento',
+      // Con la cuenta en mora, `oldestDueDate` es cuándo empezó a deberse; al
+      // día, es su próximo vencimiento. Es el mismo campo leído en los dos
+      // sentidos, no un dato nuevo: aquí solo se distingue «ya venció» de
+      // «está por vencer» para que un pago que se atrasa dentro de unos días
+      // no se descubra hasta que ya es mora.
+      render: (/** @type {any} */ row) => {
+        if (!row.oldestDueDate) return <span className="text-muted-foreground">—</span>;
+        if (row.status === 'OVERDUE') {
+          return <span className="text-destructive">Venció {formatDate(row.oldestDueDate)}</span>;
+        }
+
+        const daysLeft = Math.ceil(
+          (new Date(row.oldestDueDate).getTime() - Date.now()) / (24 * 60 * 60 * 1000),
+        );
+        if (row.status === 'CURRENT' && daysLeft >= 0 && daysLeft <= 7) {
+          return (
+            <span className="text-warning">
+              Vence en {daysLeft === 0 ? 'hoy' : `${daysLeft} día${daysLeft === 1 ? '' : 's'}`}
+            </span>
+          );
+        }
+        return formatDate(row.oldestDueDate);
+      },
     },
     {
       key: 'availableCredit',
@@ -125,52 +146,38 @@ export function PortfolioPage() {
 
   return (
     <div className="space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Cartera</h1>
-        <p className="text-sm text-muted-foreground">
-          Lo que está pendiente de cobro, ordenado por lo que más urge.
-        </p>
-      </header>
+      <PageHeader
+        title="Cartera"
+        icon={CreditCard}
+        description="Lo que está pendiente de cobro, ordenado por lo que más urge."
+      />
 
       {aging && (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardDescription>Por cobrar</CardDescription>
-                <CardTitle className="text-2xl">{formatMoney(aging.balance)}</CardTitle>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader className="pb-3">
-                <CardDescription>En mora</CardDescription>
-                <CardTitle
-                  className={`text-2xl ${aging.overdue.amount > 0 ? 'text-destructive' : ''}`}
-                >
-                  {formatMoney(aging.overdue)}
-                </CardTitle>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader className="pb-3">
-                <CardDescription>Clientes con deuda</CardDescription>
-                <CardTitle className="tabular text-2xl">
-                  {aging.accounts}
-                  {aging.overdueAccounts > 0 && (
-                    <span className="ml-2 text-sm font-normal text-destructive">
-                      {aging.overdueAccounts} en mora
-                    </span>
-                  )}
-                </CardTitle>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader className="pb-3">
-                <CardDescription>Saldo a favor de clientes</CardDescription>
-                <CardTitle className="text-2xl">{formatMoney(aging.unappliedCredit)}</CardTitle>
-              </CardHeader>
-            </Card>
-          </div>
+          <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard label="Por cobrar" value={formatMoney(aging.balance)} icon={Wallet} featured delay={0} />
+            <StatCard
+              label="En mora"
+              value={formatMoney(aging.overdue)}
+              icon={AlertTriangle}
+              tone={aging.overdue.amount > 0 ? 'destructive' : 'default'}
+              delay={40}
+            />
+            <StatCard
+              label="Clientes con deuda"
+              value={String(aging.accounts)}
+              hint={aging.overdueAccounts > 0 ? `${aging.overdueAccounts} en mora` : undefined}
+              icon={Users}
+              tone={aging.overdueAccounts > 0 ? 'warning' : 'default'}
+              delay={80}
+            />
+            <StatCard
+              label="Saldo a favor de clientes"
+              value={formatMoney(aging.unappliedCredit)}
+              icon={HandCoins}
+              delay={120}
+            />
+          </section>
 
           <Card>
             <CardHeader className="pb-4">
@@ -179,37 +186,14 @@ export function PortfolioPage() {
                 Cuánto lleva pendiente cada peso, contando desde su vencimiento.
               </CardDescription>
             </CardHeader>
-            <div className="scroll-x px-6 pb-6">
-              <div className="flex min-w-[36rem] gap-3">
-                {aging.buckets.map((/** @type {any} */ bucket) => {
-                  const share =
-                    aging.balance.amount > 0
-                      ? Math.round((bucket.amount.amount / aging.balance.amount) * 100)
-                      : 0;
-
-                  return (
-                    <div key={bucket.key} className="flex-1 space-y-2">
-                      <p className="text-xs text-muted-foreground">{bucket.label}</p>
-                      <p className="font-medium tabular">{formatMoney(bucket.amount)}</p>
-                      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                        <div
-                          className={`h-full ${
-                            bucket.key === 'current' ? 'bg-success' : 'bg-destructive'
-                          }`}
-                          style={{ width: `${share}%` }}
-                        />
-                      </div>
-                      <p className="text-xs tabular text-muted-foreground">{share}%</p>
-                    </div>
-                  );
-                })}
-              </div>
+            <div className="px-6 pb-6">
+              <AgingBars buckets={aging.buckets} total={aging.balance.amount} />
             </div>
           </Card>
         </>
       )}
 
-      <div className="flex flex-wrap gap-3 rounded-lg border bg-card p-4">
+      <div className="flex flex-wrap gap-3 rounded-xl border-[1.5px] border-black/12 bg-card p-4 dark:border-white/15">
         <div className="relative min-w-56 flex-1">
           <Search
             className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
@@ -268,31 +252,7 @@ export function PortfolioPage() {
         }
       />
 
-      {meta.totalPages > 1 && (
-        <nav className="flex items-center justify-between gap-4" aria-label="Paginación">
-          <p className="text-sm text-muted-foreground">
-            Página {meta.page} de {meta.totalPages} · {meta.total} cuentas
-          </p>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!meta.hasPrev}
-              onClick={() => setPage((value) => value - 1)}
-            >
-              Anterior
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!meta.hasNext}
-              onClick={() => setPage((value) => value + 1)}
-            >
-              Siguiente
-            </Button>
-          </div>
-        </nav>
-      )}
+      <Pagination meta={meta} onPageChange={setPage} itemLabel="cuentas" />
 
       <p className="flex items-center gap-2 text-xs text-muted-foreground">
         <Wallet className="size-3.5" aria-hidden="true" />

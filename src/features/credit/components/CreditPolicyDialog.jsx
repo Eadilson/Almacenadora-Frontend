@@ -20,6 +20,12 @@ import { useCreditMutations } from '../hooks/useCredit.js';
 /**
  * Política de crédito de un cliente: límite, plazo y bloqueo.
  *
+ * No hay un interruptor de «tiene crédito o no» aparte del límite: dejarlo en
+ * cero es, por sí mismo, un cliente de contado. Un interruptor aparte solo
+ * añadiría un estado que puede desincronizarse del límite sin resolver nada que
+ * el límite no resuelva ya. Pausar el crédito sin perder el límite configurado
+ * es lo que hace «Bloquear la cuenta», que sí es un estado distinto.
+ *
  * Bajar el límite por debajo de lo que ya debe es una decisión legítima —deja de
  * poder llevar más, pero lo que ya llevó sigue vigente—, así que se avisa en lugar
  * de impedirlo.
@@ -36,20 +42,20 @@ export function CreditPolicyDialog({ open, onOpenChange, customer, account, hasD
 
   const currency = account?.balance?.currency ?? customer?.credit?.limit?.currency ?? 'GTQ';
 
-  const [enabled, setEnabled] = useState(false);
   const [limit, setLimit] = useState('');
   const [termDays, setTermDays] = useState('30');
   const [blocked, setBlocked] = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    setEnabled(Boolean(customer?.credit?.enabled));
     setLimit(customer?.credit?.limit ? toMajorString(customer.credit.limit) : '');
     setTermDays(String(customer?.credit?.termDays ?? 30));
     setBlocked(account?.status === 'BLOCKED');
   }, [open, customer, account]);
 
-  const parsedLimit = parseMoneyInput(limit, currency);
+  // Vacío es cero, no «sin definir»: si no fuera así, borrar el límite para
+  // quitarle el crédito a alguien no tendría forma de mandarse.
+  const parsedLimit = parseMoneyInput(limit || '0', currency);
   const lowersBelowDebt =
     Boolean(parsedLimit) && Boolean(account) && parsedLimit.amount < account.balance.amount;
 
@@ -62,7 +68,6 @@ export function CreditPolicyDialog({ open, onOpenChange, customer, account, hasD
       await updatePolicy.mutateAsync({
         customerId: customer.id,
         changes: {
-          enabled,
           limit: { amount: /** @type {any} */ (parsedLimit).amount, currency },
           termDays: Number(termDays) || 0,
           blocked,
@@ -84,30 +89,20 @@ export function CreditPolicyDialog({ open, onOpenChange, customer, account, hasD
           </DialogDescription>
         </DialogHeader>
 
-        <label className="flex items-start gap-3 rounded-md border p-3">
-          <input
-            type="checkbox"
-            className="mt-0.5"
-            checked={enabled}
-            onChange={(event) => setEnabled(event.target.checked)}
-          />
-          <span className="space-y-0.5 text-sm">
-            <span className="block font-medium">Permitir compras al crédito</span>
-            <span className="block text-xs text-muted-foreground">
-              Sin esto, solo se le puede vender de contado.
-            </span>
-          </span>
-        </label>
-
         <div className="grid gap-4 sm:grid-cols-2">
-          <FormField name="limit" label="Límite de crédito" required>
+          <FormField
+            name="limit"
+            label="Límite de crédito"
+            required
+            hint="Cero es un cliente de contado."
+          >
             {({ id }) => (
               <MoneyInput
                 id={id}
                 currency={currency}
                 value={limit}
                 onChange={(event) => setLimit(event.target.value)}
-                disabled={!enabled}
+                placeholder="0.00"
               />
             )}
           </FormField>
@@ -121,7 +116,6 @@ export function CreditPolicyDialog({ open, onOpenChange, customer, account, hasD
                 max={365}
                 value={termDays}
                 onChange={(event) => setTermDays(event.target.value)}
-                disabled={!enabled}
               />
             )}
           </FormField>

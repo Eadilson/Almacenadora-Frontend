@@ -39,6 +39,7 @@ export function SaleDetailPage() {
 
   const [voiding, setVoiding] = useState(false);
   const [reason, setReason] = useState('');
+  const { error: voidError, submitting: voidSubmitting, run: runVoid } = useDialogSubmit();
 
   const [returning, setReturning] = useState(false);
   const [returnReason, setReturnReason] = useState('');
@@ -61,6 +62,17 @@ export function SaleDetailPage() {
   const returnLines = returnableLines
     .map((line) => ({ productId: line.productId, quantity: returnQuantities[line.productId] ?? '' }))
     .filter((entry) => Number(entry.quantity) > 0);
+
+  async function submitVoid() {
+    const ok = await runVoid(() =>
+      voidSale.mutateAsync({ id: /** @type {string} */ (id), reason }),
+    );
+
+    if (!ok) return;
+    setVoiding(false);
+    setReason('');
+    void refetch();
+  }
 
   async function submitReturn() {
     const ok = await run(() =>
@@ -103,11 +115,16 @@ export function SaleDetailPage() {
           </p>
         </div>
 
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => window.print()}>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => window.print()} title="Sin costo ni utilidad: es lo que se le entrega al cliente.">
             <Printer aria-hidden="true" />
             Imprimir
           </Button>
+          {canSeeProfit && (
+            <span className="text-xs text-muted-foreground">
+              Costo y utilidad no salen en lo impreso
+            </span>
+          )}
 
           {(sale.status === 'CONFIRMED' || sale.status === 'PARTIALLY_RETURNED') &&
             can('sales:return') &&
@@ -180,136 +197,147 @@ export function SaleDetailPage() {
         </Card>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Cliente</CardTitle>
-          <CardDescription>
-            {sale.customer?.name ?? 'Consumidor final'}
-            {sale.customer?.taxId && ` · ${sale.customer.taxId}`}
-          </CardDescription>
-        </CardHeader>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Productos</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="scroll-x">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left text-xs text-muted-foreground">
-                  <th className="pb-2 font-medium">Producto</th>
-                  <th className="pb-2 text-right font-medium">Cant.</th>
-                  <th className="pb-2 text-right font-medium">Precio</th>
-                  {canSeeProfit && <th className="pb-2 text-right font-medium">Costo</th>}
-                  <th className="pb-2 text-right font-medium">Total</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {sale.lines.map((line) => (
-                  <tr key={line.productId}>
-                    <td className="py-2 pr-3">
-                      <p className="font-medium">{line.name}</p>
-                      <p className="font-mono text-xs text-muted-foreground">{line.sku}</p>
-                    </td>
-                    <td className="py-2 pr-3 text-right tabular">{formatQuantity(line.quantity)}</td>
-                    <td className="py-2 pr-3 text-right tabular">{formatMoney(line.unitPrice)}</td>
-                    {canSeeProfit && (
-                      <td className="py-2 pr-3 text-right tabular text-muted-foreground">
-                        {line.unitCost ? formatMoney(line.unitCost) : '—'}
-                      </td>
-                    )}
-                    <td className="py-2 text-right tabular">{formatMoney(line.lineTotal)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <Separator className="my-4" />
-
-          <dl className="ml-auto max-w-xs space-y-1.5 text-sm">
-            <div className="flex justify-between">
-              <dt className="text-muted-foreground">Subtotal</dt>
-              <dd className="tabular">{formatMoney(sale.subtotal)}</dd>
-            </div>
-
-            {sale.discountTotal.amount > 0 && (
-              <div className="flex justify-between">
-                <dt className="text-muted-foreground">Descuento</dt>
-                <dd className="tabular">−{formatMoney(sale.discountTotal)}</dd>
-              </div>
-            )}
-
-            {sale.taxTotal.amount > 0 && (
-              <div className="flex justify-between">
-                <dt className="text-muted-foreground">
-                  Impuesto{sale.pricesIncludeTax ? ' (incluido)' : ''}
-                </dt>
-                <dd className="tabular">{formatMoney(sale.taxTotal)}</dd>
-              </div>
-            )}
-
-            <div className="flex justify-between border-t pt-1.5 text-base font-semibold">
-              <dt>Total</dt>
-              <dd className="tabular">{formatMoney(sale.total)}</dd>
-            </div>
-
-            {sale.creditAmount.amount > 0 && (
-              <div className="flex justify-between text-warning">
-                <dt>Queda a deber</dt>
-                <dd className="tabular">{formatMoney(sale.creditAmount)}</dd>
-              </div>
-            )}
-
-            {canSeeProfit && sale.grossProfit && (
-              <div className="flex justify-between border-t pt-1.5 text-muted-foreground">
-                <dt>Utilidad</dt>
-                <dd className="tabular">
-                  {formatMoney(sale.grossProfit)}
-                  {sale.marginBasisPoints !== null && (
-                    <span className="ml-1 text-xs">
-                      ({(sale.marginBasisPoints / 100).toFixed(1)}%)
-                    </span>
-                  )}
-                </dd>
-              </div>
-            )}
-          </dl>
-        </CardContent>
-      </Card>
-
-      {sale.payments.length > 0 && (
-        <Card>
+      {/*
+        Un documento comercial, no una tabla con una suma abajo: los
+        productos son el cuerpo (a la izquierda, con más espacio), el total
+        —lo primero que cualquiera busca en una factura— es lo primero que
+        se ve a la derecha, no la última línea de una lista.
+      */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle className="text-base">Cobro</CardTitle>
+            <CardTitle className="text-base">Productos</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="divide-y">
-              {sale.payments.map((payment, index) => (
-                <li key={index} className="flex items-center justify-between py-2 text-sm">
-                  <span>
-                    {payment.method}
-                    {payment.reference && (
-                      <span className="ml-2 text-xs text-muted-foreground">{payment.reference}</span>
+            <div className="scroll-x">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-xs text-muted-foreground">
+                    <th className="pb-2 font-medium">Producto</th>
+                    <th className="pb-2 text-right font-medium">Cant.</th>
+                    <th className="pb-2 text-right font-medium">Precio</th>
+                    {canSeeProfit && (
+                      <th className="no-print pb-2 text-right font-medium">Costo</th>
                     )}
-                  </span>
-                  <span className="tabular font-medium">{formatMoney(payment.amount)}</span>
-                </li>
-              ))}
-            </ul>
+                    <th className="pb-2 text-right font-medium">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {sale.lines.map((line) => (
+                    <tr key={line.productId}>
+                      <td className="py-2 pr-3">
+                        <p className="font-medium">{line.name}</p>
+                        <p className="font-mono text-xs text-muted-foreground">{line.sku}</p>
+                      </td>
+                      <td className="py-2 pr-3 text-right tabular">{formatQuantity(line.quantity)}</td>
+                      <td className="py-2 pr-3 text-right tabular">{formatMoney(line.unitPrice)}</td>
+                      {canSeeProfit && (
+                        <td className="no-print py-2 pr-3 text-right tabular text-muted-foreground">
+                          {line.unitCost ? formatMoney(line.unitCost) : '—'}
+                        </td>
+                      )}
+                      <td className="py-2 text-right tabular">{formatMoney(line.lineTotal)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <Separator className="my-4" />
+
+            <dl className="ml-auto max-w-xs space-y-1.5 text-sm">
+              <div className="flex justify-between">
+                <dt className="text-muted-foreground">Subtotal</dt>
+                <dd className="tabular">{formatMoney(sale.subtotal)}</dd>
+              </div>
+
+              {sale.discountTotal.amount > 0 && (
+                <div className="flex justify-between">
+                  <dt className="text-muted-foreground">Descuento</dt>
+                  <dd className="tabular">−{formatMoney(sale.discountTotal)}</dd>
+                </div>
+              )}
+
+              {sale.taxTotal.amount > 0 && (
+                <div className="flex justify-between">
+                  <dt className="text-muted-foreground">
+                    Impuesto{sale.pricesIncludeTax ? ' (incluido)' : ''}
+                  </dt>
+                  <dd className="tabular">{formatMoney(sale.taxTotal)}</dd>
+                </div>
+              )}
+            </dl>
           </CardContent>
         </Card>
-      )}
 
-      {sale.dueDate && (
-        <Alert variant="warning">
-          <AlertDescription>
-            Vence el {formatDateTime(sale.dueDate)} · plazo de {sale.creditTermDays} días.
-          </AlertDescription>
-        </Alert>
-      )}
+        <div className="space-y-4">
+          <Card>
+            <CardContent className="space-y-1 p-5">
+              <p className="text-sm text-muted-foreground">Total</p>
+              <p className="text-4xl font-bold leading-none tracking-tight tabular-nums">
+                {formatMoney(sale.total)}
+              </p>
+
+              {sale.creditAmount.amount > 0 && (
+                <p className="pt-2 text-sm font-medium text-warning">
+                  Queda a deber {formatMoney(sale.creditAmount)}
+                </p>
+              )}
+
+              {canSeeProfit && sale.grossProfit && (
+                <p className="no-print pt-2 text-xs text-muted-foreground">
+                  Utilidad {formatMoney(sale.grossProfit)}
+                  {sale.marginBasisPoints !== null &&
+                    ` (${(sale.marginBasisPoints / 100).toFixed(1)}%)`}
+                </p>
+              )}
+
+              {sale.dueDate && (
+                <p className="pt-2 text-xs text-muted-foreground">
+                  Vence el {formatDateTime(sale.dueDate)} · plazo de {sale.creditTermDays} días.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">Cliente</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0 text-sm">
+              <p className="font-medium">{sale.customer?.name ?? 'Consumidor final'}</p>
+              {sale.customer?.taxId && (
+                <p className="text-muted-foreground">{sale.customer.taxId}</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {sale.payments.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Cobro</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <ul className="divide-y">
+                  {sale.payments.map((payment, index) => (
+                    <li key={index} className="flex items-center justify-between py-2 text-sm">
+                      <span>
+                        {payment.method}
+                        {payment.reference && (
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            {payment.reference}
+                          </span>
+                        )}
+                      </span>
+                      <span className="tabular font-medium">{formatMoney(payment.amount)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
 
       <Dialog open={voiding} onOpenChange={setVoiding}>
         <DialogContent>
@@ -333,20 +361,22 @@ export function SaleDetailPage() {
             )}
           </FormField>
 
+          {voidError && (
+            <Alert variant="destructive">
+              <AlertDescription>{voidError}</AlertDescription>
+            </Alert>
+          )}
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setVoiding(false)}>
               Volver
             </Button>
             <Button
               variant="destructive"
-              disabled={reason.trim().length < 5 || voidSale.isPending}
-              onClick={async () => {
-                await voidSale.mutateAsync({ id: /** @type {string} */ (id), reason });
-                setVoiding(false);
-                void refetch();
-              }}
+              disabled={reason.trim().length < 5 || voidSale.isPending || voidSubmitting}
+              onClick={() => void submitVoid()}
             >
-              {voidSale.isPending ? 'Anulando…' : 'Anular venta'}
+              {voidSale.isPending || voidSubmitting ? 'Anulando…' : 'Anular venta'}
             </Button>
           </DialogFooter>
         </DialogContent>

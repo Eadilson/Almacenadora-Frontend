@@ -19,6 +19,7 @@ import {
 import { FormField } from '@/components/forms/FormField.jsx';
 import { ErrorState, PageLoader } from '@/components/feedback/states.jsx';
 import { usePermission } from '@/hooks/usePermission';
+import { useDialogSubmit } from '@/hooks/useDialogSubmit';
 import { formatMoney } from '@/lib/money';
 import { formatDate, formatDateTime, formatQuantity } from '@/lib/format';
 import { usePurchaseOrder, usePurchasingMutations } from '../hooks/usePurchasing.js';
@@ -48,6 +49,7 @@ export function PurchaseOrderDetailPage() {
   const [receiving, setReceiving] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
+  const { error: cancelError, submitting: cancelSubmitting, run: runCancel } = useDialogSubmit();
   const [quantities, setQuantities] = useState(/** @type {Record<string, string>} */ ({}));
   const [receiptError, setReceiptError] = useState('');
 
@@ -91,6 +93,16 @@ export function PurchaseOrderDetailPage() {
     }
   };
 
+  const submitCancel = async () => {
+    const ok = await runCancel(() =>
+      cancelOrder.mutateAsync({ id: /** @type {string} */ (id), reason: cancelReason }),
+    );
+    if (!ok) return;
+    setCancelling(false);
+    setCancelReason('');
+    void refetch();
+  };
+
   const canReceive = can('purchases:receive') && order.isReceivable;
 
   return (
@@ -110,6 +122,12 @@ export function PurchaseOrderDetailPage() {
           <p className="text-sm text-muted-foreground">
             {order.supplier.name} · emitida {formatDate(order.issuedAt)}
             {order.expectedAt && <> · esperada {formatDate(order.expectedAt)}</>}
+            {order.supplierInvoiceNumber && (
+              <>
+                {' · factura del proveedor '}
+                <span className="font-mono">{order.supplierInvoiceNumber}</span>
+              </>
+            )}
           </p>
         </div>
 
@@ -349,20 +367,22 @@ export function PurchaseOrderDetailPage() {
             )}
           </FormField>
 
+          {cancelError && (
+            <Alert variant="destructive">
+              <AlertDescription>{cancelError}</AlertDescription>
+            </Alert>
+          )}
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setCancelling(false)}>
               Volver
             </Button>
             <Button
               variant="destructive"
-              disabled={cancelReason.trim().length < 5 || cancelOrder.isPending}
-              onClick={async () => {
-                await cancelOrder.mutateAsync({ id: /** @type {string} */ (id), reason: cancelReason });
-                setCancelling(false);
-                void refetch();
-              }}
+              disabled={cancelReason.trim().length < 5 || cancelOrder.isPending || cancelSubmitting}
+              onClick={() => void submitCancel()}
             >
-              Cancelar orden
+              {cancelOrder.isPending || cancelSubmitting ? 'Cancelando…' : 'Cancelar orden'}
             </Button>
           </DialogFooter>
         </DialogContent>

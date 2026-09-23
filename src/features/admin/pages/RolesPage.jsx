@@ -3,8 +3,10 @@ import { Lock, Plus, ShieldCheck, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button.jsx';
 import { Badge } from '@/components/ui/badge.jsx';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card.jsx';
+import { PageHeader } from '@/components/ui/page-header.jsx';
 import { Alert, AlertDescription } from '@/components/ui/alert.jsx';
 import { ErrorState, PageLoader } from '@/components/feedback/states.jsx';
+import { ConfirmDialog } from '@/components/feedback/ConfirmDialog.jsx';
 import { usePermission } from '@/hooks/usePermission';
 import { RoleDialog } from '../components/RoleDialog.jsx';
 import { useAdminMutations, usePermissionCatalog, useRoles } from '../hooks/useAdmin.js';
@@ -22,6 +24,7 @@ export function RolesPage() {
 
   const [editing, setEditing] = useState(/** @type {any} */ (null));
   const [creating, setCreating] = useState(false);
+  const [deleting, setDeleting] = useState(/** @type {any} */ (null));
 
   const { data: roles, isPending, isError, error, refetch } = useRoles();
   const { data: catalog } = usePermissionCatalog();
@@ -51,21 +54,18 @@ export function RolesPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Roles y permisos</h1>
-          <p className="text-sm text-muted-foreground">
-            Qué puede hacer cada puesto. Los nombres los decide usted.
-          </p>
-        </div>
-
+      <PageHeader
+        title="Roles y permisos"
+        icon={ShieldCheck}
+        description="Qué puede hacer cada puesto. Los nombres los decide usted."
+      >
         {canManage && (
           <Button onClick={() => setCreating(true)}>
             <Plus aria-hidden="true" />
             Crear rol
           </Button>
         )}
-      </header>
+      </PageHeader>
 
       <Alert>
         <AlertDescription>
@@ -109,9 +109,7 @@ export function RolesPage() {
                         variant="ghost"
                         size="sm"
                         title="Eliminar"
-                        onClick={async () => {
-                          await deleteRole.mutateAsync(role.id);
-                        }}
+                        onClick={() => setDeleting(role)}
                       >
                         <Trash2 aria-hidden="true" />
                       </Button>
@@ -159,6 +157,15 @@ export function RolesPage() {
         }}
         role={editing}
         catalog={catalog ?? []}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleting)}
+        onOpenChange={(open) => !open && setDeleting(null)}
+        title={`Eliminar «${deleting?.name}»`}
+        description="Solo se puede eliminar si nadie lo tiene asignado. No hay vuelta atrás."
+        confirmLabel="Eliminar"
+        onConfirm={() => deleteRole.mutateAsync(deleting.id)}
       />
     </div>
   );

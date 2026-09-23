@@ -44,7 +44,7 @@ test.describe('devolución de una venta', () => {
     const sku = page.getByLabel(/Código \(SKU\)/);
     await sku.waitFor({ state: 'visible', timeout: 20_000 });
 
-    await sku.fill(datos.sku);
+    // El campo lo asigna el servidor: está bloqueado, no se escribe.
     await page.getByLabel(/^Nombre/).fill(datos.producto);
     // «General» no exige atributos propios: no es lo que se está probando aquí.
     await page.getByLabel(/^Categoría/).selectOption({ label: 'General' });
@@ -55,6 +55,12 @@ test.describe('devolución de una venta', () => {
 
     await page.getByRole('button', { name: 'Crear producto' }).click();
     await expect(page).toHaveURL(/\/productos\/[a-f0-9]{24}/, { timeout: 20_000 });
+    await esperarCarga(page);
+
+    // El servidor generó el código: se toma el real y se reutiliza en el resto
+    // de la prueba en vez del que se hubiera escrito a mano.
+    datos.sku = await sku.inputValue();
+    expect(datos.sku).toMatch(/^PROD-\d{6}$/);
 
     sinErrores(ojo, 'alta de proveedor y producto');
   });

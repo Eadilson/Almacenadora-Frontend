@@ -157,3 +157,28 @@ export function formatPercentage(basisPoints) {
 export function currentFormatting() {
   return { timezone: activeTimezone, locale: activeLocale };
 }
+
+/**
+ * El día de hoy —o el de cualquier instante— en la zona horaria de la
+ * empresa, como `2026-07-30`.
+ *
+ * `date.toISOString().slice(0, 10)` convierte primero a UTC: con una empresa
+ * al oeste del meridiano (Guatemala es UTC-6), eso adelanta la fecha un día
+ * durante buena parte de la noche, y un rango «desde/hasta hoy» calculado así
+ * deja fuera lo que se acaba de vender esta misma tarde. Y usar la hora local
+ * del navegador sin más tampoco basta: quien consulta desde otro país debe
+ * ver el mismo «hoy» que sus compañeros, no el suyo propio.
+ *
+ * @param {Date} [date]
+ * @returns {string}
+ */
+export function localISODate(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: activeTimezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const lookup = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${lookup.year}-${lookup.month}-${lookup.day}`;
+}

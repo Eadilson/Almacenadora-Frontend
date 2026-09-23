@@ -1,18 +1,20 @@
-import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Receipt, Search, ShoppingCart } from 'lucide-react';
+import { useMemo } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Banknote, Receipt, Search, ShoppingCart, TrendingUp, Wallet, X } from 'lucide-react';
 import { Button } from '@/components/ui/button.jsx';
 import { Input } from '@/components/ui/input.jsx';
 import { Select } from '@/components/ui/select.jsx';
 import { Badge } from '@/components/ui/badge.jsx';
-import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card.jsx';
+import { PageHeader } from '@/components/ui/page-header.jsx';
+import { StatCard } from '@/components/ui/stat-card.jsx';
 import { DataTable } from '@/components/data/DataTable.jsx';
+import { Pagination } from '@/components/data/Pagination.jsx';
 import { usePermission } from '@/hooks/usePermission';
 import { useSession } from '@/hooks/useSession';
-import { useDebounced } from '@/hooks/useDebounced';
+import { useListState } from '@/hooks/useListState';
 import { formatMoney } from '@/lib/money';
 import { formatDateTime } from '@/lib/format';
-import { useSalesList, useSalesSummary } from '../hooks/useSales.js';
+import { useCustomer, useSalesList, useSalesSummary } from '../hooks/useSales.js';
 
 const STATUS_VARIANTS = {
   CONFIRMED: 'success',
@@ -31,29 +33,36 @@ export function SalesPage() {
   const navigate = useNavigate();
   const { can } = usePermission();
   const { user, activeBranchId } = useSession();
+  // Se llega aquí desde la ficha de un cliente («Ver todas» sus compras),
+  // así que el filtro también puede venir de la URL, no solo de un control
+  // en esta pantalla.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const customerId = searchParams.get('clienteId');
 
-  const branches = user?.branches ?? [];
-  const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('');
-  const [type, setType] = useState('');
-  const [page, setPage] = useState(1);
+  const branchId = activeBranchId ?? user?.branches?.[0]?.id;
+  const { filters: listFilters, query, setFilter, setPage } = useListState({
+    search: '',
+    status: '',
+    type: '',
+  });
 
-  const debouncedSearch = useDebounced(search, 300);
   const canSeeProfit = can('products:cost:read');
+  const { data: filteredCustomer } = useCustomer(customerId);
 
   const filters = useMemo(
     () => ({
-      search: debouncedSearch || undefined,
-      status: status || undefined,
-      type: type || undefined,
-      page,
-      limit: 25,
+      ...query,
+      branchId,
+      customerId: customerId || undefined,
     }),
-    [debouncedSearch, status, type, page],
+    [branchId, query, customerId],
   );
 
   const { data, isPending, isError, error, refetch } = useSalesList(filters);
-  const { data: summary } = useSalesSummary({ branchId: activeBranchId ?? branches[0]?.id });
+  const { data: summary } = useSalesSummary(
+    { branchId },
+    { enabled: !customerId },
+  );
 
   const rows = data?.items ?? [];
   const meta = data?.meta ?? {};
@@ -117,14 +126,11 @@ export function SalesPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Ventas</h1>
-          <p className="text-sm text-muted-foreground">
-            Cada venta descuenta inventario y emite su factura.
-          </p>
-        </div>
-
+      <PageHeader
+        title="Ventas"
+        icon={Receipt}
+        description="Cada venta descuenta inventario y emite su factura."
+      >
         {can('sales:create') && (
           <Button asChild>
             <Link to="/ventas/nueva">
@@ -133,51 +139,72 @@ export function SalesPage() {
             </Link>
           </Button>
         )}
-      </header>
+      </PageHeader>
 
-      {summary && (
+      {/* El resumen es del día y de la sucursal, no del cliente: mostrarlo
+          filtrado por cliente mezclaría dos contextos distintos (una foto de
+          hoy sobre un historial que no tiene límite de fecha). Con el filtro
+          activo, esta pantalla deja de ser el panel del día y pasa a ser el
+          historial de una relación comercial — el mismo motivo por el que
+          Movimientos y Abonos tampoco llevan StatCards. */}
+      {summary && !customerId && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardDescription>Ventas de hoy</CardDescription>
-              <CardTitle className="text-2xl tabular">{summary.count}</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader className="pb-3">
-              <CardDescription>Total cobrado</CardDescription>
-              <CardTitle className="text-2xl">{formatMoney(summary.total)}</CardTitle>
-            </CardHeader>
-          </Card>
-          <Card>
-            <CardHeader className="pb-3">
-              <CardDescription>Efectivo y tarjeta</CardDescription>
-              <CardTitle className="text-2xl">{formatMoney(summary.cash)}</CardTitle>
-            </CardHeader>
-          </Card>
+          <StatCard
+            label="Total cobrado"
+            value={formatMoney(summary.total)}
+            icon={Banknote}
+            featured
+            delay={0}
+          />
+          <StatCard label="Ventas de hoy" value={String(summary.count)} icon={Receipt} delay={40} />
+          <StatCard
+            label="Efectivo y tarjeta"
+            value={formatMoney(summary.cash)}
+            icon={Wallet}
+            delay={80}
+          />
           {canSeeProfit && summary.grossProfit && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardDescription>Utilidad del día</CardDescription>
-                <CardTitle className="text-2xl">{formatMoney(summary.grossProfit)}</CardTitle>
-              </CardHeader>
-            </Card>
+            <StatCard
+              label="Utilidad del día"
+              value={formatMoney(summary.grossProfit)}
+              icon={TrendingUp}
+              delay={120}
+            />
           )}
         </div>
       )}
 
-      <div className="flex flex-wrap gap-3 rounded-lg border bg-card p-4">
+      {customerId && (
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary" className="gap-1.5 py-1 pl-2.5 pr-1">
+            Cliente: {filteredCustomer?.name ?? '…'}
+            <button
+              type="button"
+              onClick={() => {
+                setSearchParams((params) => {
+                  params.delete('clienteId');
+                  return params;
+                });
+                setPage(1);
+              }}
+              className="rounded-full p-0.5 transition-colors hover:bg-black/10 dark:hover:bg-white/10"
+              aria-label="Quitar filtro de cliente"
+            >
+              <X className="size-3" aria-hidden="true" />
+            </button>
+          </Badge>
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-3 rounded-xl border-[1.5px] border-black/12 bg-card p-4 dark:border-white/15">
         <div className="relative min-w-56 flex-1">
           <Search
             className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
             aria-hidden="true"
           />
           <Input
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
-              setPage(1);
-            }}
+            value={listFilters.search}
+            onChange={(event) => setFilter('search', event.target.value)}
             placeholder="Buscar por número, factura o cliente…"
             className="pl-9"
             aria-label="Buscar ventas"
@@ -185,11 +212,8 @@ export function SalesPage() {
         </div>
 
         <Select
-          value={status}
-          onChange={(event) => {
-            setStatus(event.target.value);
-            setPage(1);
-          }}
+          value={listFilters.status}
+          onChange={(event) => setFilter('status', event.target.value)}
           className="w-44"
           aria-label="Estado"
         >
@@ -199,11 +223,8 @@ export function SalesPage() {
         </Select>
 
         <Select
-          value={type}
-          onChange={(event) => {
-            setType(event.target.value);
-            setPage(1);
-          }}
+          value={listFilters.type}
+          onChange={(event) => setFilter('type', event.target.value)}
           className="w-40"
           aria-label="Forma de pago"
         >
@@ -236,21 +257,7 @@ export function SalesPage() {
         }
       />
 
-      {meta.totalPages > 1 && (
-        <nav className="flex items-center justify-between gap-4" aria-label="Paginación">
-          <p className="text-sm text-muted-foreground">
-            Página {meta.page} de {meta.totalPages} · {meta.total} ventas
-          </p>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" disabled={!meta.hasPrev} onClick={() => setPage((p) => p - 1)}>
-              Anterior
-            </Button>
-            <Button variant="outline" size="sm" disabled={!meta.hasNext} onClick={() => setPage((p) => p + 1)}>
-              Siguiente
-            </Button>
-          </div>
-        </nav>
-      )}
+      <Pagination meta={meta} onPageChange={setPage} itemLabel="ventas" />
     </div>
   );
 }

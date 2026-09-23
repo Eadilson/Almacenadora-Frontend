@@ -279,6 +279,11 @@ test.describe('administración', () => {
     const fila = page.getByRole('row').filter({ hasText: datos.correo });
     await fila.getByTitle('Desactivar').click();
 
+    const dialogo = page.getByRole('dialog');
+    await expect(dialogo).toBeVisible();
+    await dialogo.getByRole('button', { name: 'Desactivar' }).click();
+    await expect(dialogo).toBeHidden({ timeout: 20_000 });
+
     await expect(fila.getByText('Inactivo')).toBeVisible({ timeout: 20_000 });
 
     /**

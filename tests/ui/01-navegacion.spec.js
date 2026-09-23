@@ -105,7 +105,7 @@ test.describe('recorrido general', () => {
 
   test('credenciales incorrectas muestran el error sin dejar entrar', async ({ page }) => {
     await page.goto('/login');
-    await page.getByLabel(/Correo electrónico/).fill('admin@ferreteria.local');
+    await page.getByLabel(/Correo electrónico/).fill('nadie@example.invalid');
     await page.getByLabel(/^Contraseña/).fill('estaNoEsLaClave');
     await page.getByRole('button', { name: 'Entrar' }).click();
 

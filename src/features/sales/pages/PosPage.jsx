@@ -34,7 +34,7 @@ export function PosPage() {
   const { user, tenant, activeBranchId } = useSession();
 
   const branches = user?.branches ?? [];
-  const [branchId, setBranchId] = useState(activeBranchId ?? branches[0]?.id ?? '');
+  const branchId = activeBranchId ?? branches[0]?.id ?? '';
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState(/** @type {any[]} */ ([]));
   const [customerId, setCustomerId] = useState('');
@@ -137,24 +137,6 @@ export function PosPage() {
       <div className="space-y-4">
         <header className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-2xl font-semibold tracking-tight">Punto de venta</h1>
-
-          {branches.length > 1 && (
-            <Select
-              value={branchId}
-              onChange={(event) => {
-                setBranchId(event.target.value);
-                clearCart();
-              }}
-              className="w-48"
-              aria-label="Sucursal"
-            >
-              {branches.map((branch) => (
-                <option key={branch.id} value={branch.id}>
-                  {branch.name}
-                </option>
-              ))}
-            </Select>
-          )}
         </header>
 
         <div className="relative">
@@ -201,15 +183,22 @@ export function PosPage() {
                   type="button"
                   disabled={remaining < 1}
                   onClick={() => addToCart(row)}
-                  className="flex w-full items-center justify-between gap-3 rounded-lg border bg-card p-3 text-left transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex w-full items-center justify-between gap-3 rounded-lg border-[1.5px] border-black/12 bg-card p-3.5 text-left transition-colors hover:border-primary/40 hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/15"
                 >
                   <div className="min-w-0">
                     <p className="truncate font-medium">{row.product.name}</p>
                     <p className="font-mono text-xs text-muted-foreground">{row.product.sku}</p>
+                    {/* Sin esto, escanear dos veces el mismo código no avisa de
+                        que ya está en el carrito hasta que se mira aparte. */}
+                    {inCart && (
+                      <p className="mt-1 text-xs font-medium text-primary">
+                        {inCart.quantity} en el carrito
+                      </p>
+                    )}
                   </div>
 
                   <div className="shrink-0 text-right">
-                    <p className="font-medium">{formatMoney(row.product.salePrice)}</p>
+                    <p className="font-semibold tabular-nums">{formatMoney(row.product.salePrice)}</p>
                     <Badge variant={remaining > 0 ? 'secondary' : 'destructive'} className="mt-0.5">
                       {remaining > 0 ? `${formatQuantity(String(remaining))} disp.` : 'Sin existencia'}
                     </Badge>
@@ -320,7 +309,7 @@ export function PosPage() {
                   {customers.map((customer) => (
                     <option key={customer.id} value={customer.id}>
                       {customer.name}
-                      {customer.credit.enabled ? ' · con crédito' : ''}
+                      {customer.credit.limit.amount > 0 ? ' · con crédito' : ''}
                     </option>
                   ))}
                 </Select>
@@ -337,9 +326,9 @@ export function PosPage() {
                 )}
               </div>
 
-              {selectedCustomer && !selectedCustomer.credit.enabled && (
+              {selectedCustomer && selectedCustomer.credit.limit.amount === 0 && (
                 <p className="text-[11px] text-muted-foreground">
-                  Sin crédito habilitado: esta venta debe cobrarse de contado.
+                  Sin límite de crédito asignado: esta venta debe cobrarse de contado.
                 </p>
               )}
             </div>

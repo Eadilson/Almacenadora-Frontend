@@ -11,41 +11,46 @@
  */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222 47% 11%;
+    --panel-ink: #0d223d;
+    --panel-ink-strong: #10213b;
+    --panel-accent: #2f6bff;
+    --panel-accent-strong: #235ee7;
+    --panel-surface: #f5f8fc;
+
+    --background: 210 24% 98%;
+    --foreground: 222 28% 12%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 222 28% 12%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
+    --popover-foreground: 222 28% 12%;
 
-    /* El color primario lo sobrescribe la marca de la empresa en tiempo de
-       ejecución; este es el valor neutro por omisión. */
-    --primary: 222 47% 20%;
-    --primary-foreground: 210 40% 98%;
+    /* Azul mineral: limpio en datos, más vivo que el índigo de una plantilla SaaS. */
+    --primary: 218 100% 59%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
+    --secondary: 214 24% 93%;
+    --secondary-foreground: 222 28% 14%;
 
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
+    --muted: 214 26% 94%;
+    --muted-foreground: 216 12% 42%;
 
-    --accent: 210 40% 96%;
-    --accent-foreground: 222 47% 11%;
+    --accent: 215 100% 97%;
+    --accent-foreground: 218 74% 38%;
 
-    --destructive: 0 72% 51%;
+    --destructive: 356 70% 47%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 142 71% 36%;
+    --success: 153 58% 33%;
     --success-foreground: 0 0% 100%;
 
-    --warning: 38 92% 45%;
-    --warning-foreground: 0 0% 100%;
+    --warning: 33 87% 45%;
+    --warning-foreground: 35 35% 10%;
 
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 222 47% 20%;
+    --border: 215 22% 86%;
+    --input: 215 22% 86%;
+    --ring: 218 100% 59%;
 
     /*
      * Colores de serie para los gráficos.
@@ -61,49 +66,75 @@
      * Van en hexadecimal y no en HSL como el resto porque Recharts los recibe
      * como valor de color directo, sin envolverlos en `hsl()`.
      */
-    --chart-1: #2a78d6;
-    --chart-2: #eb6834;
-    --chart-3: #1baf7a;
-    --chart-4: #eda100;
-    --chart-grid: #e6e9ee;
+    --chart-1: #2f6bff;
+    --chart-2: #0ba67a;
+    --chart-3: #f0a036;
+    --chart-4: #e65163;
+    --chart-grid: #d9e1e7;
 
-    --radius: 0.5rem;
+    /*
+     * 12px, no 8px: el radio anterior (0.5rem) es el de un formulario de
+     * sistema operativo, no el de un producto que se quiere ver cuidado.
+     * Es un único token — sube de golpe en botones, tarjetas, campos y
+     * diálogos, sin tocar cada componente por separado.
+     */
+    --radius: 0.75rem;
+
+    /*
+     * Curvas de aceleración para transiciones de interfaz.
+     *
+     * Las que trae CSS por defecto (`ease`, `ease-out`) son débiles: apenas se
+     * notan en una transición corta. Estas dos son las de uso general del
+     * sistema — cualquier componente nuevo las reutiliza en vez de inventar
+     * su propio `cubic-bezier`. El diálogo ya tiene la suya propia (una
+     * aproximación de resorte crítico, ver tailwind.config.js) porque nace y
+     * muere en su sitio; esto es para todo lo demás: hover, aparición,
+     * cambios de estado.
+     */
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   }
 
   .dark {
-    --background: 222 47% 8%;
-    --foreground: 210 40% 96%;
+    --panel-ink: #091a30;
+    --panel-ink-strong: #f4f7fb;
+    --panel-accent: #6fa0ff;
+    --panel-accent-strong: #93b8ff;
+    --panel-surface: #111827;
 
-    --card: 222 45% 11%;
-    --card-foreground: 210 40% 96%;
+    --background: 220 26% 7%;
+    --foreground: 210 28% 94%;
 
-    --popover: 222 45% 11%;
-    --popover-foreground: 210 40% 96%;
+    --card: 220 24% 10%;
+    --card-foreground: 210 28% 94%;
 
-    --primary: 210 40% 96%;
-    --primary-foreground: 222 47% 11%;
+    --popover: 220 24% 10%;
+    --popover-foreground: 210 28% 94%;
 
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 96%;
+    --primary: 217 100% 72%;
+    --primary-foreground: 220 26% 7%;
 
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
+    --secondary: 220 18% 16%;
+    --secondary-foreground: 210 28% 94%;
 
-    --accent: 217 33% 17%;
-    --accent-foreground: 210 40% 96%;
+    --muted: 220 18% 16%;
+    --muted-foreground: 215 16% 66%;
 
-    --destructive: 0 63% 45%;
+    --accent: 217 38% 20%;
+    --accent-foreground: 217 100% 84%;
+
+    --destructive: 356 66% 55%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 142 60% 40%;
+    --success: 153 50% 45%;
     --success-foreground: 0 0% 100%;
 
-    --warning: 38 85% 50%;
-    --warning-foreground: 222 47% 11%;
+    --warning: 35 88% 58%;
+    --warning-foreground: 35 35% 10%;
 
-    --border: 217 33% 20%;
-    --input: 217 33% 20%;
-    --ring: 213 27% 70%;
+    --border: 220 16% 22%;
+    --input: 220 16% 22%;
+    --ring: 217 100% 72%;
 
     /*
      * Las mismas cuatro tonalidades, escalonadas para la superficie oscura. No es
@@ -112,11 +143,11 @@
      * modo oscuro: peor par adyacente ΔE 8.4 en protanopía, 19.8 en visión
      * normal, y las cuatro superan 3:1 de contraste.
      */
-    --chart-1: #3987e5;
-    --chart-2: #d95926;
-    --chart-3: #199e70;
-    --chart-4: #c98500;
-    --chart-grid: #1e293b;
+    --chart-1: #6fa0ff;
+    --chart-2: #34d399;
+    --chart-3: #fbbf24;
+    --chart-4: #fb7185;
+    --chart-grid: #243142;
   }
 }
 
@@ -172,10 +203,71 @@
   .scroll-x {
     @apply w-full overflow-x-auto;
   }
+
+  /*
+   * Textura de puntos, casi imperceptible, sobre el área de trabajo.
+   *
+   * Es la diferencia entre un fondo plano de plantilla y una superficie con
+   * algo de tacto: no se nota mirándola de frente, se nota si no está. El
+   * punto se dibuja con el color de marca a muy baja opacidad, así que
+   * cambia solo con cambiar `--primary` (blanco-etiqueta incluido) y no
+   * compite nunca con el contenido, que siempre va sobre `bg-card` sólido.
+   */
+  .bg-dot-grid {
+    background-image: radial-gradient(hsl(var(--primary) / 0.14) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+
+  .app-shell-bg {
+    background: linear-gradient(180deg, hsl(var(--background)), hsl(var(--muted) / 0.42));
+  }
+
+  .glass-panel {
+    @apply border border-black/10 bg-background/95 shadow-card dark:border-white/10 dark:bg-card/95;
+  }
+
+  .surface-highlight {
+    background: hsl(var(--card));
+    box-shadow:
+      inset 0 1px 0 hsl(var(--foreground) / 0.045),
+      0 1px 2px -1px rgb(0 0 0 / 0.07),
+      0 14px 36px -28px rgb(0 0 0 / 0.35);
+  }
+
+  .sidebar-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(255 255 255 / 0.18) transparent;
+  }
+
+  .sidebar-scroll::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .sidebar-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .sidebar-scroll::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgb(255 255 255 / 0.18);
+  }
 }
 
 @media print {
   .no-print {
     display: none !important;
+  }
+
+  /*
+   * Ninguna animación de entrada sobrevive a la impresión. Sin esto, pulsar
+   * «Imprimir» justo al cargar una pantalla con tarjetas —el estado de
+   * cuenta, la factura— podía capturar el papel a medio desvanecer: la
+   * captura de impresión del navegador no espera a que termine una animación
+   * CSS en curso.
+   */
+  * {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+    transition-duration: 0s !important;
   }
 }

@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, ClipboardList } from 'lucide-react';
 import { Button } from '@/components/ui/button.jsx';
 import { Select } from '@/components/ui/select.jsx';
 import { Input } from '@/components/ui/input.jsx';
 import { Badge } from '@/components/ui/badge.jsx';
+import { PageHeader } from '@/components/ui/page-header.jsx';
 import { DataTable } from '@/components/data/DataTable.jsx';
+import { Pagination } from '@/components/data/Pagination.jsx';
 import { usePermission } from '@/hooks/usePermission';
 import { useSession } from '@/hooks/useSession';
 import { formatMoney } from '@/lib/money';
@@ -36,7 +38,7 @@ export function MovementsPage() {
   const { user, activeBranchId } = useSession();
 
   const branches = user?.branches ?? [];
-  const [branchId, setBranchId] = useState(activeBranchId ?? '');
+  const branchId = activeBranchId ?? branches[0]?.id ?? '';
   const [type, setType] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -146,14 +148,13 @@ export function MovementsPage() {
 
   return (
     <div className="space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Movimientos</h1>
-        <p className="text-sm text-muted-foreground">
-          Todo cambio de existencias, con su motivo y su responsable.
-        </p>
-      </header>
+      <PageHeader
+        title="Movimientos"
+        icon={ClipboardList}
+        description="Todo cambio de existencias, con su motivo y su responsable."
+      />
 
-      <div className="flex flex-wrap gap-3 rounded-lg border bg-card p-4">
+      <div className="flex flex-wrap gap-3 rounded-xl border-[1.5px] border-black/12 bg-card p-4 dark:border-white/15">
         <Select
           value={type}
           onChange={(event) => {
@@ -169,25 +170,6 @@ export function MovementsPage() {
             </option>
           ))}
         </Select>
-
-        {branches.length > 1 && (
-          <Select
-            value={branchId}
-            onChange={(event) => {
-              setBranchId(event.target.value);
-              setPage(1);
-            }}
-            className="w-48"
-            aria-label="Sucursal"
-          >
-            <option value="">Todas las sucursales</option>
-            {branches.map((branch) => (
-              <option key={branch.id} value={branch.id}>
-                {branch.name}
-              </option>
-            ))}
-          </Select>
-        )}
 
         <div className="flex items-center gap-2">
           <Input
@@ -226,21 +208,7 @@ export function MovementsPage() {
         emptyDescription="No hay movimientos de inventario con los filtros aplicados."
       />
 
-      {meta.totalPages > 1 && (
-        <nav className="flex items-center justify-between gap-4" aria-label="Paginación">
-          <p className="text-sm text-muted-foreground">
-            Página {meta.page} de {meta.totalPages} · {meta.total} movimientos
-          </p>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" disabled={!meta.hasPrev} onClick={() => setPage((p) => p - 1)}>
-              Anterior
-            </Button>
-            <Button variant="outline" size="sm" disabled={!meta.hasNext} onClick={() => setPage((p) => p + 1)}>
-              Siguiente
-            </Button>
-          </div>
-        </nav>
-      )}
+      <Pagination meta={meta} onPageChange={setPage} itemLabel="movimientos" />
     </div>
   );
 }

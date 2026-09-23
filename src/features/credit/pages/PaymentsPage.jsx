@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Ban, Search } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Ban, HandCoins, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button.jsx';
 import { Input } from '@/components/ui/input.jsx';
 import { Select } from '@/components/ui/select.jsx';
 import { Badge } from '@/components/ui/badge.jsx';
 import { Textarea } from '@/components/ui/textarea.jsx';
+import { PageHeader } from '@/components/ui/page-header.jsx';
+import { Alert, AlertDescription } from '@/components/ui/alert.jsx';
+import { Pagination } from '@/components/data/Pagination.jsx';
 import {
   Dialog,
   DialogContent,
@@ -17,7 +20,9 @@ import {
 import { FormField } from '@/components/forms/FormField.jsx';
 import { DataTable } from '@/components/data/DataTable.jsx';
 import { usePermission } from '@/hooks/usePermission';
+import { useSession } from '@/hooks/useSession';
 import { useDebounced } from '@/hooks/useDebounced';
+import { useDialogSubmit } from '@/hooks/useDialogSubmit';
 import { formatMoney } from '@/lib/money';
 import { formatDateTime } from '@/lib/format';
 import { useCreditMutations, usePayments } from '../hooks/useCredit.js';
@@ -36,7 +41,10 @@ const STATUS_VARIANTS = {
  * dejó de contar.
  */
 export function PaymentsPage() {
+  const navigate = useNavigate();
   const { can } = usePermission();
+  const { activeBranchId, user } = useSession();
+  const branchId = activeBranchId ?? user?.branches?.[0]?.id;
   const { voidPayment } = useCreditMutations();
 
   const [search, setSearch] = useState('');
@@ -46,18 +54,25 @@ export function PaymentsPage() {
 
   const [voiding, setVoiding] = useState(/** @type {any} */ (null));
   const [reason, setReason] = useState('');
+  const {
+    error: voidError,
+    clearError: clearVoidError,
+    submitting: voidSubmitting,
+    run: runVoid,
+  } = useDialogSubmit();
 
   const debouncedSearch = useDebounced(search, 300);
 
   const filters = useMemo(
     () => ({
       search: debouncedSearch || undefined,
+      branchId,
       status: status || undefined,
       method: method || undefined,
       page,
       limit: 25,
     }),
-    [debouncedSearch, status, method, page],
+    [branchId, debouncedSearch, status, method, page],
   );
 
   const { data, isPending, isError, error, refetch } = usePayments(filters);
@@ -137,6 +152,10 @@ export function PaymentsPage() {
                   onClick={(/** @type {any} */ event) => {
                     event.stopPropagation();
                     setReason('');
+                    // La misma instancia de useDialogSubmit se reutiliza para
+                    // filas distintas: sin esto, el error del abono anterior
+                    // seguía visible al abrir el diálogo para este otro.
+                    clearVoidError();
                     setVoiding(row);
                   }}
                 >
@@ -149,22 +168,26 @@ export function PaymentsPage() {
       : []),
   ];
 
+  async function submitVoid() {
+    const ok = await runVoid(() => voidPayment.mutateAsync({ id: voiding.id, reason }));
+    if (!ok) return;
+    setVoiding(null);
+    setReason('');
+  }
+
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Abonos</h1>
-          <p className="text-sm text-muted-foreground">
-            Cada abono reduce la deuda del cliente y deja su recibo.
-          </p>
-        </div>
-
+      <PageHeader
+        title="Abonos"
+        icon={HandCoins}
+        description="Cada abono reduce la deuda del cliente y deja su recibo."
+      >
         <Button variant="outline" asChild>
           <Link to="/creditos">Ver cartera</Link>
         </Button>
-      </header>
+      </PageHeader>
 
-      <div className="flex flex-wrap gap-3 rounded-lg border bg-card p-4">
+      <div className="flex flex-wrap gap-3 rounded-xl border-[1.5px] border-black/12 bg-card p-4 dark:border-white/15">
         <div className="relative min-w-56 flex-1">
           <Search
             className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
@@ -221,35 +244,12 @@ export function PaymentsPage() {
         isError={isError}
         error={error}
         onRetry={() => void refetch()}
+        onRowClick={(/** @type {any} */ row) => navigate(`/creditos/${row.customerId}`)}
         emptyTitle="Sin abonos"
         emptyDescription="Los abonos que registre desde la cartera aparecerán aquí."
       />
 
-      {meta.totalPages > 1 && (
-        <nav className="flex items-center justify-between gap-4" aria-label="Paginación">
-          <p className="text-sm text-muted-foreground">
-            Página {meta.page} de {meta.totalPages} · {meta.total} abonos
-          </p>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!meta.hasPrev}
-              onClick={() => setPage((value) => value - 1)}
-            >
-              Anterior
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!meta.hasNext}
-              onClick={() => setPage((value) => value + 1)}
-            >
-              Siguiente
-            </Button>
-          </div>
-        </nav>
-      )}
+      <Pagination meta={meta} onPageChange={setPage} itemLabel="abonos" />
 
       <Dialog open={Boolean(voiding)} onOpenChange={(open) => !open && setVoiding(null)}>
         <DialogContent>
@@ -274,19 +274,22 @@ export function PaymentsPage() {
             )}
           </FormField>
 
+          {voidError && (
+            <Alert variant="destructive">
+              <AlertDescription>{voidError}</AlertDescription>
+            </Alert>
+          )}
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setVoiding(null)}>
               Volver
             </Button>
             <Button
               variant="destructive"
-              disabled={reason.trim().length < 5 || voidPayment.isPending}
-              onClick={async () => {
-                await voidPayment.mutateAsync({ id: voiding.id, reason });
-                setVoiding(null);
-              }}
+              disabled={reason.trim().length < 5 || voidPayment.isPending || voidSubmitting}
+              onClick={() => void submitVoid()}
             >
-              {voidPayment.isPending ? 'Anulando…' : 'Anular abono'}
+              {voidPayment.isPending || voidSubmitting ? 'Anulando…' : 'Anular abono'}
             </Button>
           </DialogFooter>
         </DialogContent>

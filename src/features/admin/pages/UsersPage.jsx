@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react';
-import { KeyRound, Search, UserPlus, UserX } from 'lucide-react';
+import { KeyRound, Search, UserCog, UserPlus, UserX } from 'lucide-react';
 import { Button } from '@/components/ui/button.jsx';
 import { Input } from '@/components/ui/input.jsx';
 import { Select } from '@/components/ui/select.jsx';
 import { Badge } from '@/components/ui/badge.jsx';
+import { PageHeader } from '@/components/ui/page-header.jsx';
 import { Alert, AlertDescription } from '@/components/ui/alert.jsx';
+import { Pagination } from '@/components/data/Pagination.jsx';
 import { DataTable } from '@/components/data/DataTable.jsx';
+import { ConfirmDialog } from '@/components/feedback/ConfirmDialog.jsx';
 import { usePermission } from '@/hooks/usePermission';
 import { useSession } from '@/hooks/useSession';
 import { useDebounced } from '@/hooks/useDebounced';
@@ -33,6 +36,7 @@ export function UsersPage() {
   const [editing, setEditing] = useState(/** @type {any} */ (null));
   const [creating, setCreating] = useState(false);
   const [resetting, setResetting] = useState(/** @type {any} */ (null));
+  const [deactivating, setDeactivating] = useState(/** @type {any} */ (null));
 
   const debouncedSearch = useDebounced(search, 300);
 
@@ -136,7 +140,18 @@ export function UsersPage() {
                 title={row.isActive ? 'Desactivar' : 'Reactivar'}
                 onClick={async (/** @type {any} */ event) => {
                   event.stopPropagation();
-                  await setUserStatus.mutateAsync({ id: row.id, active: !row.isActive });
+                  // Reactivar no tiene vuelta atrás peligrosa: solo desactivar,
+                  // que cierra sesiones abiertas, pide confirmar antes.
+                  if (row.isActive) {
+                    setDeactivating(row);
+                  } else {
+                    try {
+                      await setUserStatus.mutateAsync({ id: row.id, active: true });
+                    } catch {
+                      // El aviso global de la mutación ya avisa del fallo (toast);
+                      // esto solo evita una promesa rechazada sin capturar.
+                    }
+                  }
                 }}
               >
                 <UserX aria-hidden="true" />
@@ -150,21 +165,18 @@ export function UsersPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Usuarios</h1>
-          <p className="text-sm text-muted-foreground">
-            Quién entra al sistema y qué puede hacer cada uno.
-          </p>
-        </div>
-
+      <PageHeader
+        title="Usuarios"
+        icon={UserCog}
+        description="Quién entra al sistema y qué puede hacer cada uno."
+      >
         {can('users:invite') && (
           <Button onClick={() => setCreating(true)}>
             <UserPlus aria-hidden="true" />
             Agregar persona
           </Button>
         )}
-      </header>
+      </PageHeader>
 
       <Alert>
         <AlertDescription>
@@ -173,7 +185,7 @@ export function UsersPage() {
         </AlertDescription>
       </Alert>
 
-      <div className="flex flex-wrap gap-3 rounded-lg border bg-card p-4">
+      <div className="flex flex-wrap gap-3 rounded-xl border-[1.5px] border-black/12 bg-card p-4 dark:border-white/15">
         <div className="relative min-w-56 flex-1">
           <Search
             className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
@@ -235,31 +247,7 @@ export function UsersPage() {
         emptyDescription="Agregue a las personas que van a usar el sistema."
       />
 
-      {meta.totalPages > 1 && (
-        <nav className="flex items-center justify-between gap-4" aria-label="Paginación">
-          <p className="text-sm text-muted-foreground">
-            Página {meta.page} de {meta.totalPages} · {meta.total} usuarios
-          </p>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!meta.hasPrev}
-              onClick={() => setPage((value) => value - 1)}
-            >
-              Anterior
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!meta.hasNext}
-              onClick={() => setPage((value) => value + 1)}
-            >
-              Siguiente
-            </Button>
-          </div>
-        </nav>
-      )}
+      <Pagination meta={meta} onPageChange={setPage} itemLabel="usuarios" />
 
       <UserDialog
         open={creating || Boolean(editing)}
@@ -279,6 +267,15 @@ export function UsersPage() {
         open={Boolean(resetting)}
         onOpenChange={(/** @type {boolean} */ open) => !open && setResetting(null)}
         user={resetting}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deactivating)}
+        onOpenChange={(open) => !open && setDeactivating(null)}
+        title={`Desactivar a ${deactivating?.name}`}
+        description="Sus sesiones abiertas se cerrarán. Puede reactivarla cuando quiera; su historial no se toca."
+        confirmLabel="Desactivar"
+        onConfirm={() => setUserStatus.mutateAsync({ id: deactivating.id, active: false })}
       />
     </div>
   );

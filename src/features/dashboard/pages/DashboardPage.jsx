@@ -1,294 +1,300 @@
-import { useMemo, useState } from 'react';
+import { Suspense, createElement, lazy, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
-import {
-  AlertTriangle,
   ArrowRight,
+  BarChart3,
+  Bell,
+  Boxes,
+  Clock3,
+  CreditCard,
+  HandCoins,
+  PackagePlus,
   PackageX,
-  Receipt,
+  ShoppingCart,
+  Tag,
   TrendingDown,
   TrendingUp,
+  UserPlus,
+  Users,
   Wallet,
+  Zap,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button.jsx';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card.jsx';
-import { Alert, AlertDescription } from '@/components/ui/alert.jsx';
+import { PageHeader } from '@/components/ui/page-header.jsx';
 import { ErrorState, PageLoader } from '@/components/feedback/states.jsx';
-import { ChartEmpty, ChartFrame, ChartTooltip } from '@/components/charts/ChartFrame.jsx';
-import { SERIES_COLORS } from '@/components/charts/palette';
+import { ChartFrame } from '@/components/charts/ChartFrame.jsx';
 import { usePermission } from '@/hooks/usePermission';
 import { useSession } from '@/hooks/useSession';
 import { formatMoney } from '@/lib/money';
-import { formatDate, formatDateTime, formatNumber } from '@/lib/format';
+import { formatDateTime, formatNumber, formatRelative, localISODate } from '@/lib/format';
 import { useDashboardReport } from '@/features/reports/hooks/useReports.js';
+import { useSalesList } from '@/features/sales/hooks/useSales.js';
+import heroImage from '@/assets/dashboard/jewelry-hero.png';
 
-/**
- * Panel de inicio.
- *
- * Responde, en ese orden, lo que alguien pregunta al abrir el sistema por la
- * mañana: cuánto se vendió, cómo va respecto al período anterior, qué se está
- * moviendo, y qué necesita atención hoy —lo que está por acabarse y lo que está
- * por cobrar—.
- *
- * Las cifras de utilidad aparecen solo si el servidor las envía, y las envía solo
- * a quien tiene el permiso financiero. Aquí no hay ninguna comprobación de
- * permisos sobre el dinero: la respuesta ya es la verdad.
- */
+const SalesTrendChart = lazy(() =>
+  import('@/features/dashboard/components/SalesTrendChart.jsx').then((module) => ({
+    default: module.SalesTrendChart,
+  })),
+);
+
+const PERIODS = [
+  { key: 'today', label: 'Hoy' },
+  { key: '7d', label: '7 días' },
+  { key: '30d', label: '30 días' },
+  { key: '90d', label: '90 días' },
+  { key: 'month', label: 'Este mes' },
+  { key: 'year', label: 'Este año' },
+];
+
+const TONE_STYLES = {
+  blue: 'bg-[#edf3ff] text-[#2f68e9]',
+  green: 'bg-[#e7f8f2] text-[#07966c]',
+  amber: 'bg-[#fff3df] text-[#c87408]',
+  rose: 'bg-[#ffebee] text-[#df3149]',
+};
+
+/** Panel principal con indicadores del punto de venta activo. */
 export function DashboardPage() {
-  const { user, tenant } = useSession();
+  const { user, tenant, activeBranchId } = useSession();
   const { can } = usePermission();
+  const [period, setPeriod] = useState('30d');
 
-  const [days, setDays] = useState(30);
-
-  const filters = useMemo(() => {
-    const to = new Date();
-    const from = new Date();
-    from.setDate(from.getDate() - (days - 1));
-    return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
-  }, [days]);
+  const range = useMemo(() => resolvePeriod(period), [period]);
+  const filters = useMemo(
+    () => ({ from: range.from, to: range.to, branchId: activeBranchId ?? undefined }),
+    [activeBranchId, range],
+  );
 
   const canSeeReports = can('reports:read');
+  const canSeeSales = can('sales:read');
   const { data, isPending, isError, error, refetch } = useDashboardReport(filters);
+  const { data: recentSalesData } = useSalesList(
+    { branchId: activeBranchId ?? undefined, status: 'CONFIRMED', page: 1, limit: 3 },
+    { enabled: canSeeSales },
+  );
 
-  // Quien no puede ver reportes conserva un panel de bienvenida, sin cifras.
   if (!canSeeReports) return <WelcomePanel user={user} tenant={tenant} />;
-
   if (isPending) return <PageLoader label="Calculando indicadores…" />;
   if (isError) return <ErrorState error={error} onRetry={() => void refetch()} />;
 
+  const recentSales = recentSalesData?.items ?? [];
   const financial = Boolean(data.totals.grossProfit);
   const trend = data.comparison.changeBasisPoints;
+  const firstName = user?.name?.split(' ')[0] ?? 'usuario';
+  const todayLabel = new Intl.DateTimeFormat('es-GT', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date());
 
-  const series = data.series.map((/** @type {any} */ point) => ({
-    label: formatDate(point.date),
-    total: point.total.amount,
-  }));
+  const metricCards = [
+    {
+      label: 'Ventas del período',
+      value: formatMoney(data.totals.total),
+      hint: trend !== null ? `${trend >= 0 ? '+' : ''}${(trend / 100).toFixed(1)}% vs. anterior` : 'Sin comparación',
+      icon: TrendingUp,
+      tone: 'blue',
+      positive: trend === null || trend >= 0,
+    },
+    {
+      label: 'Total de ventas',
+      value: formatNumber(data.totals.count),
+      hint: `${formatNumber(data.totals.count)} tickets generados`,
+      icon: ShoppingCart,
+      tone: 'blue',
+      positive: true,
+    },
+    {
+      label: 'Ticket promedio',
+      value: formatMoney(data.totals.averageTicket),
+      hint: 'Promedio por operación',
+      icon: Tag,
+      tone: 'amber',
+      positive: true,
+    },
+    {
+      label: data.portfolio ? 'Por cobrar' : 'Ventas a crédito',
+      value: data.portfolio ? formatMoney(data.portfolio.balance) : formatMoney(data.totals.credit),
+      hint: data.portfolio?.overdue.amount > 0 ? `${formatMoney(data.portfolio.overdue)} en mora` : 'Cartera controlada',
+      icon: CreditCard,
+      tone: data.portfolio?.overdue.amount > 0 ? 'rose' : 'green',
+      positive: !data.portfolio?.overdue.amount,
+    },
+  ];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Buen día, {user?.name?.split(' ')[0]}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {tenant?.tradeName || tenant?.legalName}
-            {user?.lastLoginAt && <> · último acceso {formatDateTime(user.lastLoginAt)}</>}
-          </p>
-        </div>
-
-        <div className="flex gap-1.5">
-          {[7, 30, 90].map((option) => (
-            <Button
-              key={option}
-              variant={days === option ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setDays(option)}
-            >
-              {option} días
-            </Button>
-          ))}
-        </div>
-      </header>
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardDescription>Vendido</CardDescription>
-            <CardTitle className="text-2xl">{formatMoney(data.totals.total)}</CardTitle>
-            {trend !== null && (
-              <p className="flex items-center gap-1 text-xs">
-                {trend >= 0 ? (
-                  <TrendingUp className="size-3 text-success" aria-hidden="true" />
-                ) : (
-                  <TrendingDown className="size-3 text-destructive" aria-hidden="true" />
-                )}
-                <span className={trend >= 0 ? 'text-success' : 'text-destructive'}>
-                  {trend >= 0 ? '+' : ''}
-                  {(trend / 100).toFixed(1)}%
-                </span>
-                <span className="text-muted-foreground">vs. período anterior</span>
-              </p>
-            )}
-          </CardHeader>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardDescription>Ventas</CardDescription>
-            <CardTitle className="tabular text-2xl">{formatNumber(data.totals.count)}</CardTitle>
-            <p className="text-xs text-muted-foreground">
-              ticket promedio {formatMoney(data.totals.averageTicket)}
+    <div className="grid items-start gap-5 2xl:grid-cols-[minmax(0,1fr)_292px]">
+      <div className="min-w-0 space-y-4">
+        <section
+          className="relative min-h-[218px] overflow-hidden rounded-2xl border border-border bg-card bg-cover bg-[position:70%_center] px-5 py-7 shadow-[0_16px_34px_-30px_rgb(13_34_61/0.55)] sm:px-7 lg:bg-center lg:px-8"
+          style={{ backgroundImage: `url(${heroImage})` }}
+        >
+          <div className="absolute inset-0 bg-gradient-to-r from-white via-white/95 to-white/10 dark:from-[#101b2d] dark:via-[#101b2d]/95 dark:to-transparent" />
+          <div className="relative z-10 max-w-[620px]">
+            <p className="text-[11px] font-semibold uppercase text-[#53647b] [letter-spacing:0.18em] dark:text-white/60">
+              {todayLabel}
             </p>
-          </CardHeader>
-        </Card>
+            <h1 className="mt-2 font-serif text-[clamp(2.35rem,3.5vw,3.7rem)] font-semibold leading-[0.98] text-[var(--panel-ink-strong)]">
+              Buenos días, {firstName}
+            </h1>
+            <p className="mt-2 text-base text-[#53647b] dark:text-white/66">
+              Que hoy sea un gran día para hacer crecer tu negocio.
+            </p>
 
-        {financial ? (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardDescription>Utilidad</CardDescription>
-              <CardTitle className="text-2xl">{formatMoney(data.totals.grossProfit)}</CardTitle>
-              <p className="text-xs text-muted-foreground">
-                margen {(data.totals.marginBasisPoints / 100).toFixed(1)}%
-              </p>
-            </CardHeader>
-          </Card>
-        ) : (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardDescription>Al crédito</CardDescription>
-              <CardTitle className="text-2xl">{formatMoney(data.totals.credit)}</CardTitle>
-            </CardHeader>
-          </Card>
-        )}
+            <div className="mt-6 flex max-w-[590px] flex-wrap gap-2" aria-label="Período del dashboard">
+              {PERIODS.map((option) => (
+                <Button
+                  key={option.key}
+                  variant={period === option.key ? 'default' : 'outline'}
+                  size="sm"
+                  aria-pressed={period === option.key}
+                  onClick={() => setPeriod(option.key)}
+                  className={period === option.key ? 'bg-[var(--panel-ink)] hover:bg-[var(--panel-ink)]/90' : 'bg-white/80'}
+                >
+                  {option.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+          <blockquote className="absolute right-[22%] top-4 z-10 hidden max-w-56 font-serif text-xs italic leading-4 text-[#53647b] 2xl:block">
+            “Las grandes historias también comienzan con un detalle.”
+          </blockquote>
+        </section>
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardDescription>Por cobrar</CardDescription>
-            <CardTitle className="text-2xl">
-              {data.portfolio ? formatMoney(data.portfolio.balance) : '—'}
-            </CardTitle>
-            {data.portfolio?.overdue.amount > 0 && (
-              <p className="text-xs text-destructive">
-                {formatMoney(data.portfolio.overdue)} en mora
-              </p>
-            )}
-          </CardHeader>
-        </Card>
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {metricCards.map((card) => <DashboardMetric key={card.label} {...card} />)}
+        </section>
+
+        <section className="grid gap-4 xl:grid-cols-[minmax(0,1.75fr)_minmax(270px,0.82fr)]">
+          <Suspense fallback={<SalesTrendChartFallback days={range.days} />}>
+            <SalesTrendChart points={data.series} days={range.days} currency={data.currency} />
+          </Suspense>
+
+          <Card className="h-full">
+            <CardHeader className="flex flex-row items-start justify-between space-y-0 p-5 pb-3">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <BarChart3 className="size-4" aria-hidden="true" />
+                  Resumen financiero
+                </CardTitle>
+                <CardDescription className="mt-1 text-xs">Período seleccionado</CardDescription>
+              </div>
+              <Link to="/reportes" className="flex items-center gap-1 text-xs font-semibold text-primary">
+                Ver detalles <ArrowRight className="size-3.5" aria-hidden="true" />
+              </Link>
+            </CardHeader>
+            <CardContent className="space-y-1 px-5 pb-5">
+              <FinanceRow
+                icon={TrendingUp}
+                label={financial ? 'Utilidad' : 'A crédito'}
+                value={financial ? formatMoney(data.totals.grossProfit) : formatMoney(data.totals.credit)}
+                hint={financial ? `Margen ${(data.totals.marginBasisPoints / 100).toFixed(1)}%` : undefined}
+                tone="blue"
+              />
+              <FinanceRow icon={Wallet} label="Ingresos" value={formatMoney(data.totals.total)} tone="green" />
+              <FinanceRow icon={CreditCard} label="A crédito" value={formatMoney(data.totals.credit)} tone="blue" />
+              <FinanceRow
+                icon={PackageX}
+                label="Bajo el mínimo"
+                value={`${formatNumber(data.inventory.lowStock)} productos`}
+                tone={data.inventory.lowStock > 0 ? 'rose' : 'green'}
+              />
+            </CardContent>
+          </Card>
+        </section>
+
+        <section className="grid gap-4 lg:grid-cols-3">
+          <TopProducts products={data.topProducts} />
+          <PaymentMethods rows={data.byPaymentMethod} />
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 p-5 pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Boxes className="size-4" aria-hidden="true" /> Estado del inventario
+              </CardTitle>
+              <Link to="/existencias" className="text-xs font-semibold text-primary">Ver más</Link>
+            </CardHeader>
+            <CardContent className="space-y-4 px-5 pb-5">
+              <InventoryLine label="Productos activos" value={formatNumber(data.inventory.activeProducts)} />
+              <InventoryLine label="Bajo el mínimo" value={formatNumber(data.inventory.lowStock)} alert={data.inventory.lowStock > 0} />
+              <div className="h-2 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-[#2f6bff]"
+                  style={{
+                    width: `${Math.max(5, Math.min(100, data.inventory.activeProducts > 0
+                      ? ((data.inventory.activeProducts - data.inventory.lowStock) / data.inventory.activeProducts) * 100
+                      : 100))}%`,
+                  }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">Disponibilidad general del punto de venta.</p>
+            </CardContent>
+          </Card>
+        </section>
       </div>
 
-      {(data.inventory.lowStock > 0 || data.portfolio?.overdueAccounts > 0) && (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {data.inventory.lowStock > 0 && (
-            <Alert variant="warning">
-              <PackageX aria-hidden="true" />
-              <AlertDescription className="flex flex-wrap items-center gap-2">
-                <span>{data.inventory.lowStock} producto(s) por debajo del mínimo.</span>
-                <Button variant="link" size="sm" className="h-auto p-0" asChild>
-                  <Link to="/existencias">
-                    Ver cuáles
-                    <ArrowRight aria-hidden="true" />
-                  </Link>
-                </Button>
-              </AlertDescription>
-            </Alert>
-          )}
+      <DashboardRail data={data} recentSales={recentSales} canSeeSales={canSeeSales} />
+    </div>
+  );
+}
 
-          {data.portfolio?.overdueAccounts > 0 && (
-            <Alert variant="destructive">
-              <AlertTriangle aria-hidden="true" />
-              <AlertDescription className="flex flex-wrap items-center gap-2">
-                <span>{data.portfolio.overdueAccounts} cliente(s) con pagos vencidos.</span>
-                <Button variant="link" size="sm" className="h-auto p-0" asChild>
-                  <Link to="/creditos">
-                    Ver cartera
-                    <ArrowRight aria-hidden="true" />
-                  </Link>
-                </Button>
-              </AlertDescription>
-            </Alert>
-          )}
-        </div>
-      )}
+function DashboardRail({ data, recentSales, canSeeSales }) {
+  return (
+    <aside className="grid gap-4 md:grid-cols-2 2xl:sticky 2xl:top-[92px] 2xl:grid-cols-1" aria-label="Actividad del negocio">
+      <Card>
+        <CardHeader className="p-5 pb-3">
+          <CardTitle className="flex items-center gap-2 text-base"><Zap className="size-4" /> Acciones rápidas</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-2 px-5 pb-5">
+          <RailAction to="/ventas/nueva" icon={ShoppingCart} label="Nueva venta" primary />
+          <RailAction to="/abonos" icon={HandCoins} label="Registrar abono" />
+          <RailAction to="/clientes" icon={UserPlus} label="Nuevo cliente" />
+          <RailAction to="/productos/nuevo" icon={PackagePlus} label="Nuevo producto" />
+        </CardContent>
+      </Card>
 
-      <ChartFrame
-        title="Ventas por día"
-        description={`Últimos ${days} días.`}
-        table={{
-          columns: [
-            { key: 'label', label: 'Fecha' },
-            { key: 'countText', label: 'Ventas' },
-            { key: 'totalText', label: 'Total' },
-          ],
-          rows: data.series.map((/** @type {any} */ point) => ({
-            label: formatDate(point.date),
-            countText: formatNumber(point.count),
-            totalText: formatMoney(point.total),
-          })),
-        }}
-      >
-        {series.length === 0 ? (
-          <ChartEmpty label="Aún no hay ventas en este período." />
-        ) : (
-          <ResponsiveContainer width="100%" height={260}>
-            <AreaChart data={series} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
-              <defs>
-                <linearGradient id="panelVentas" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={SERIES_COLORS[0]} stopOpacity={0.22} />
-                  <stop offset="100%" stopColor={SERIES_COLORS[0]} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
-              <XAxis
-                dataKey="label"
-                tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
-                tickLine={false}
-                axisLine={false}
-                minTickGap={24}
-              />
-              <YAxis
-                tickFormatter={(/** @type {number} */ value) =>
-                  formatNumber(Math.round(value / 100))
-                }
-                tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
-                tickLine={false}
-                axisLine={false}
-                width={56}
-              />
-              <Tooltip
-                content={
-                  <ChartTooltip
-                    format={(/** @type {number} */ value) =>
-                      formatMoney({ amount: value, currency: data.currency })
-                    }
-                  />
-                }
-              />
-              <Area
-                type="monotone"
-                dataKey="total"
-                name="Vendido"
-                stroke={SERIES_COLORS[0]}
-                strokeWidth={2}
-                fill="url(#panelVentas)"
-                dot={false}
-                activeDot={{ r: 4, strokeWidth: 2, stroke: 'hsl(var(--card))' }}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        )}
-      </ChartFrame>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 p-5 pb-3">
+          <CardTitle className="flex items-center gap-2 text-base"><Bell className="size-4" /> Notificaciones</CardTitle>
+          <Link to="/movimientos" className="text-xs font-semibold text-primary">Ver todas</Link>
+        </CardHeader>
+        <CardContent className="px-5 pb-5">
+          <ul className="space-y-4">
+            <Notification
+              tone={data.inventory.lowStock > 0 ? 'rose' : 'green'}
+              title={data.inventory.lowStock > 0 ? `${data.inventory.lowStock} productos bajo el mínimo` : 'Inventario bajo control'}
+              detail="Estado actual"
+            />
+            <Notification tone="blue" title={`${formatNumber(data.totals.count)} ventas registradas`} detail="Período seleccionado" />
+            <Notification tone="green" title="Punto de venta sincronizado" detail="Información actualizada" />
+          </ul>
+        </CardContent>
+      </Card>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Lo que más se vende</CardTitle>
-            <CardDescription>Por dinero generado en el período.</CardDescription>
+      {canSeeSales && (
+        <Card className="md:col-span-2 2xl:col-span-1">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 p-5 pb-3">
+            <CardTitle className="flex items-center gap-2 text-base"><Clock3 className="size-4" /> Últimas ventas</CardTitle>
+            <Link to="/ventas" className="text-xs font-semibold text-primary">Ver todas</Link>
           </CardHeader>
-          <CardContent>
-            {data.topProducts.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">Sin ventas todavía.</p>
+          <CardContent className="px-5 pb-5">
+            {recentSales.length === 0 ? (
+              <p className="py-4 text-center text-sm text-muted-foreground">Sin ventas recientes.</p>
             ) : (
-              <ul className="divide-y">
-                {data.topProducts.map((/** @type {any} */ product) => (
-                  <li key={product.productId} className="flex items-center justify-between py-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{product.name}</p>
-                      <p className="font-mono text-xs text-muted-foreground">{product.sku}</p>
+              <ul className="space-y-4">
+                {recentSales.map((sale) => (
+                  <li key={sale.id} className="flex items-center gap-3">
+                    <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#eaf2f8] text-xs font-semibold text-[#244460]">
+                      {initials(sale.customer?.name ?? 'Cliente general')}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <Link to={`/ventas/${sale.id}`} className="block truncate text-sm font-semibold hover:text-primary">{sale.number}</Link>
+                      <p className="truncate text-xs text-muted-foreground">{sale.customer?.name ?? 'Cliente general'}</p>
                     </div>
-                    <div className="shrink-0 text-right">
-                      <p className="tabular text-sm font-medium">{formatMoney(product.revenue)}</p>
-                      <p className="tabular text-xs text-muted-foreground">
-                        {formatNumber(product.quantity)} u.
-                      </p>
+                    <div className="text-right">
+                      <p className="text-sm font-semibold tabular">{formatMoney(sale.total)}</p>
+                      <p className="text-xs text-muted-foreground">{formatRelative(sale.issuedAt)}</p>
                     </div>
                   </li>
                 ))}
@@ -296,93 +302,188 @@ export function DashboardPage() {
             )}
           </CardContent>
         </Card>
+      )}
+    </aside>
+  );
+}
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Cómo entra el dinero</CardTitle>
-            <CardDescription>Formas de pago del período.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {data.byPaymentMethod.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">Sin cobros todavía.</p>
-            ) : (
-              <ul className="space-y-3">
-                {data.byPaymentMethod.map((/** @type {any} */ row) => {
-                  const share =
-                    data.totals.total.amount > 0
-                      ? Math.round((row.total.amount / data.totals.total.amount) * 100)
-                      : 0;
+function DashboardMetric({ label, value, hint, icon, tone, positive = true }) {
+  return (
+    <Card>
+      <CardContent className="flex min-h-[126px] items-center gap-3 p-4">
+        <span className={`grid size-11 shrink-0 place-items-center rounded-xl ${TONE_STYLES[tone]}`}>
+          {createElement(icon, { className: 'size-5', 'aria-hidden': true })}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-[#4f6078] dark:text-muted-foreground">{label}</p>
+          <p className="mt-1 whitespace-nowrap text-[1.32rem] font-bold text-[var(--panel-ink-strong)] tabular">{value}</p>
+          <p className={`mt-1 flex items-center gap-1 truncate text-xs ${positive ? 'text-[#07966c]' : 'text-destructive'}`}>
+            {positive ? <TrendingUp className="size-3.5" /> : <TrendingDown className="size-3.5" />}
+            {hint}
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
-                  return (
-                    <li key={row.method} className="space-y-1">
-                      <div className="flex items-center justify-between text-sm">
-                        <span>{row.method}</span>
-                        <span className="tabular font-medium">{formatMoney(row.total)}</span>
-                      </div>
-                      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                        <div
-                          className="h-full rounded-full"
-                          style={{ width: `${share}%`, background: SERIES_COLORS[0] }}
-                        />
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
+function FinanceRow({ icon, label, value, hint, tone }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-border/70 py-3 last:border-0">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className={`grid size-10 shrink-0 place-items-center rounded-xl ${TONE_STYLES[tone]}`}>
+          {createElement(icon, { className: 'size-5', 'aria-hidden': true })}
+        </span>
+        <span className="truncate text-sm font-medium">{label}</span>
       </div>
-
-      <div className="flex justify-center">
-        <Button variant="outline" asChild>
-          <Link to="/reportes">
-            <Receipt aria-hidden="true" />
-            Ver todos los reportes
-          </Link>
-        </Button>
+      <div className="text-right">
+        <p className="whitespace-nowrap text-sm font-semibold tabular">{value}</p>
+        {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
       </div>
     </div>
   );
 }
 
-/**
- * Panel para quien no puede ver reportes.
- *
- * Un cajero no necesita indicadores del negocio, pero sí saber dónde está y qué
- * puede hacer. Mostrarle cifras vacías o un 403 sería peor que esto.
- *
- * @param {{ user: any, tenant: any }} props
- */
+function RailAction({ to, icon, label, primary = false }) {
+  return (
+    <Link
+      to={to}
+      className={`flex h-12 items-center gap-3 rounded-xl px-4 text-sm font-semibold transition-colors ${
+        primary ? 'bg-[var(--panel-ink)] text-white hover:bg-[#163659]' : 'bg-[#f0f5fb] text-[#17304f] hover:bg-[#e6eef8] dark:bg-white/8 dark:text-white'
+      }`}
+    >
+      {createElement(icon, { className: 'size-5', 'aria-hidden': true })}
+      <span className="flex-1">{label}</span>
+      <ArrowRight className="size-4" aria-hidden="true" />
+    </Link>
+  );
+}
+
+function Notification({ tone, title, detail }) {
+  return (
+    <li className="flex gap-3">
+      <span className={`mt-1 size-3 shrink-0 rounded-full ring-4 ${
+        tone === 'rose' ? 'bg-[#ef4056] ring-[#fff0f2]' : tone === 'green' ? 'bg-[#0ba67a] ring-[#e9f8f3]' : 'bg-[#4384ff] ring-[#edf3ff]'
+      }`} />
+      <div className="min-w-0">
+        <p className="text-sm font-medium leading-5">{title}</p>
+        <p className="text-xs text-muted-foreground">{detail}</p>
+      </div>
+    </li>
+  );
+}
+
+function TopProducts({ products }) {
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 p-5 pb-3">
+        <CardTitle className="flex items-center gap-2 text-base"><Boxes className="size-4" /> Productos más vendidos</CardTitle>
+        <Link to="/productos" className="text-xs font-semibold text-primary">Ver más</Link>
+      </CardHeader>
+      <CardContent className="px-5 pb-5">
+        {products.length === 0 ? <p className="py-5 text-center text-sm text-muted-foreground">Sin ventas todavía.</p> : (
+          <ul className="space-y-3">
+            {products.slice(0, 3).map((product) => {
+              const max = products[0]?.revenue?.amount || 1;
+              const share = Math.max(8, Math.round((product.revenue.amount / max) * 100));
+              return (
+                <li key={product.productId} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold">{product.name}</p>
+                    <p className="text-xs text-muted-foreground">{formatNumber(product.quantity)} unidades</p>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                      <div className="h-full rounded-full bg-[#2f6bff]" style={{ width: `${share}%` }} />
+                    </div>
+                  </div>
+                  <span className="text-sm font-semibold tabular">{formatMoney(product.revenue)}</span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PaymentMethods({ rows }) {
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 p-5 pb-3">
+        <CardTitle className="flex items-center gap-2 text-base"><Wallet className="size-4" /> Formas de pago</CardTitle>
+        <Link to="/reportes" className="text-xs font-semibold text-primary">Ver más</Link>
+      </CardHeader>
+      <CardContent className="px-5 pb-5">
+        {rows.length === 0 ? <p className="py-5 text-center text-sm text-muted-foreground">Sin cobros todavía.</p> : (
+          <ul className="space-y-3">
+            {rows.slice(0, 4).map((row, index) => (
+              <li key={row.method} className="flex items-center gap-3">
+                <span className={`grid size-9 place-items-center rounded-full text-xs font-semibold ${index % 2 ? TONE_STYLES.green : TONE_STYLES.blue}`}>
+                  {index + 1}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold">{paymentLabel(row.method)}</p>
+                  <p className="text-xs text-muted-foreground">{formatNumber(row.count)} operaciones</p>
+                </div>
+                <p className="text-sm font-semibold tabular">{formatMoney(row.total)}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function InventoryLine({ label, value, alert = false }) {
+  return (
+    <div className="flex items-center justify-between text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <span className={alert ? 'font-semibold text-destructive' : 'font-semibold'}>{value}</span>
+    </div>
+  );
+}
+
 function WelcomePanel({ user, tenant }) {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Buen día, {user?.name?.split(' ')[0]}
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          {tenant?.tradeName || tenant?.legalName}
-          {user?.lastLoginAt && <> · último acceso {formatDateTime(user.lastLoginAt)}</>}
-        </p>
-      </header>
-
+      <PageHeader
+        title={`Buen día, ${user?.name?.split(' ')[0]}`}
+        icon={Users}
+        description={<>{tenant?.tradeName || tenant?.legalName}{user?.lastLoginAt && <> · último acceso {formatDateTime(user.lastLoginAt)}</>}</>}
+      />
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Su sesión</CardTitle>
-          <CardDescription>
-            Rol: {user?.role?.name}. Use el menú de la izquierda para trabajar.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Button asChild>
-            <Link to="/ventas/nueva">
-              <Wallet aria-hidden="true" />
-              Ir al punto de venta
-            </Link>
-          </Button>
-        </CardContent>
+        <CardHeader><CardTitle className="text-base">Su sesión</CardTitle><CardDescription>Rol: {user?.role?.name}. Use el menú para trabajar.</CardDescription></CardHeader>
+        <CardContent><Button asChild><Link to="/ventas/nueva"><Wallet /> Ir al punto de venta</Link></Button></CardContent>
       </Card>
     </div>
   );
+}
+
+function SalesTrendChartFallback({ days }) {
+  return <ChartFrame title="Evolución de ventas" description={`Últimos ${days} días.`}><div className="h-[260px] animate-pulse rounded-md bg-muted" /></ChartFrame>;
+}
+
+function resolvePeriod(period) {
+  const to = new Date();
+  const from = new Date(to);
+  if (period === 'today') from.setHours(0, 0, 0, 0);
+  if (period === '7d') from.setDate(from.getDate() - 6);
+  if (period === '30d') from.setDate(from.getDate() - 29);
+  if (period === '90d') from.setDate(from.getDate() - 89);
+  if (period === 'month') from.setDate(1);
+  if (period === 'year') {
+    from.setMonth(0);
+    from.setDate(1);
+  }
+  const days = Math.max(1, Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1);
+  return { from: localISODate(from), to: localISODate(to), days };
+}
+
+function initials(name) {
+  return String(name).split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
+}
+
+function paymentLabel(method) {
+  return { CASH: 'Efectivo', CARD: 'Tarjeta', TRANSFER: 'Transferencia', CHECK: 'Cheque' }[method] ?? method;
 }

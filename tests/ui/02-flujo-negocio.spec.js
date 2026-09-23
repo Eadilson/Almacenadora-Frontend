@@ -68,7 +68,7 @@ test.describe('flujo de un comercio, de principio a fin', () => {
     const sku = page.getByLabel(/Código \(SKU\)/);
     await sku.waitFor({ state: 'visible', timeout: 20_000 });
 
-    await sku.fill(datos.sku);
+    // El campo lo asigna el servidor: está bloqueado, no se escribe.
     await page.getByLabel(/^Nombre/).fill(datos.producto);
 
     // La categoría decide qué campos propios del negocio pide el formulario: es
@@ -90,7 +90,11 @@ test.describe('flujo de un comercio, de principio a fin', () => {
     // se puede seguir completándolo sin volver a buscarlo.
     await expect(page).toHaveURL(/\/productos\/[a-f0-9]{24}/, { timeout: 20_000 });
     await esperarCarga(page);
-    await expect(page.getByLabel(/Código \(SKU\)/)).toHaveValue(datos.sku);
+
+    // El servidor generó el código: se toma el real y se reutiliza en el resto
+    // de la prueba en vez del que se hubiera escrito a mano.
+    datos.sku = await page.getByLabel(/Código \(SKU\)/).inputValue();
+    expect(datos.sku).toMatch(/^PROD-\d{6}$/);
 
     // Y aparece en el catálogo.
     await page.goto('/productos');
@@ -110,7 +114,6 @@ test.describe('flujo de un comercio, de principio a fin', () => {
     const sku = page.getByLabel(/Código \(SKU\)/);
     await sku.waitFor({ state: 'visible', timeout: 20_000 });
 
-    await sku.fill('UI-INCOMPLETO-' + SELLO);
     await page.getByLabel(/^Nombre/).fill('Producto sin calibre');
     await page.getByLabel(/^Categoría/).selectOption({ label: 'Cables eléctricos' });
     await page.getByLabel(/Unidad de medida/).selectOption({ label: 'Unidad (UN)' });
@@ -196,8 +199,8 @@ test.describe('flujo de un comercio, de principio a fin', () => {
     await dialogo.getByLabel(/^Nombre/).fill(datos.cliente);
     await dialogo.getByLabel(/Teléfono/).fill('5544-3322');
 
-    // Habilitar el crédito descubre los campos de límite y plazo.
-    await dialogo.getByText('Permitir compras a crédito').click();
+    // Sin interruptor aparte: un límite mayor que cero ya es un cliente con
+    // crédito.
     await dialogo.getByLabel(/Límite de crédito/).fill('20000.00');
     await dialogo.getByLabel(/^Plazo/).fill('30');
 

@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, ArrowLeftRight, Boxes, History, Search, TrendingDown } from 'lucide-react';
+import { AlertTriangle, ArrowLeftRight, Boxes, History, Search, TrendingDown, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button.jsx';
 import { Input } from '@/components/ui/input.jsx';
 import { Select } from '@/components/ui/select.jsx';
 import { Badge } from '@/components/ui/badge.jsx';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card.jsx';
+import { PageHeader } from '@/components/ui/page-header.jsx';
+import { StatCard } from '@/components/ui/stat-card.jsx';
 import { DataTable } from '@/components/data/DataTable.jsx';
+import { Pagination } from '@/components/data/Pagination.jsx';
 import { usePermission } from '@/hooks/usePermission';
 import { useSession } from '@/hooks/useSession';
 import { useDebounced } from '@/hooks/useDebounced';
@@ -24,10 +26,10 @@ import { useStock, useStockSummary } from '../hooks/useInventory.js';
  */
 export function StockPage() {
   const { can } = usePermission();
-  const { user, activeBranchId, setActiveBranch } = useSession();
+  const { user, activeBranchId } = useSession();
 
   const branches = user?.branches ?? [];
-  const [branchId, setBranchId] = useState(activeBranchId ?? branches[0]?.id ?? '');
+  const branchId = activeBranchId ?? branches[0]?.id ?? '';
   const [search, setSearch] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [onlyBelow, setOnlyBelow] = useState(false);
@@ -56,13 +58,6 @@ export function StockPage() {
   const meta = data?.meta ?? {};
   const canAdjust = can('stock:adjust');
   const canSeeCost = can('products:cost:read');
-
-  /** @param {string} value */
-  const changeBranch = (value) => {
-    setBranchId(value);
-    setActiveBranch(value);
-    setPage(1);
-  };
 
   const columns = [
     {
@@ -154,57 +149,47 @@ export function StockPage() {
 
   return (
     <div className="space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Existencias</h1>
-        <p className="text-sm text-muted-foreground">
-          Qué hay disponible en cada sucursal y qué está por debajo del mínimo.
-        </p>
-      </header>
+      <PageHeader
+        title="Existencias"
+        icon={Boxes}
+        description="Qué hay disponible en cada sucursal y qué está por debajo del mínimo."
+      />
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardDescription className="flex items-center gap-2">
-              <Boxes className="size-4" aria-hidden="true" />
-              Unidades en existencia
-            </CardDescription>
-            <CardTitle className="text-2xl tabular">
-              {summary ? formatQuantity(summary.totalUnits) : '—'}
-            </CardTitle>
-          </CardHeader>
-        </Card>
+        <StatCard
+          label="Unidades en existencia"
+          value={summary ? formatQuantity(summary.totalUnits) : '—'}
+          icon={Boxes}
+          featured
+          delay={0}
+        />
 
-        <Card className={summary?.belowMinimum ? 'border-warning/50' : undefined}>
-          <CardHeader className="pb-3">
-            <CardDescription className="flex items-center gap-2">
-              <TrendingDown className="size-4" aria-hidden="true" />
-              Bajo el mínimo
-            </CardDescription>
-            <CardTitle className="text-2xl tabular">{summary?.belowMinimum ?? '—'}</CardTitle>
-          </CardHeader>
+        <StatCard
+          label="Bajo el mínimo"
+          value={summary?.belowMinimum ?? '—'}
+          icon={TrendingDown}
+          tone={summary?.belowMinimum ? 'warning' : 'default'}
+          delay={40}
+        >
           {Boolean(summary?.belowMinimum) && (
-            <CardContent className="pt-0">
-              <Button variant="outline" size="sm" onClick={() => setOnlyBelow(true)}>
-                <AlertTriangle aria-hidden="true" />
-                Ver cuáles
-              </Button>
-            </CardContent>
+            <Button variant="outline" size="sm" onClick={() => setOnlyBelow(true)}>
+              <AlertTriangle aria-hidden="true" />
+              Ver cuáles
+            </Button>
           )}
-        </Card>
+        </StatCard>
 
         {canSeeCost && (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardDescription>Valor del inventario</CardDescription>
-              <CardTitle className="text-2xl">
-                {summary?.valuation ? formatMoney(summary.valuation) : '—'}
-              </CardTitle>
-            </CardHeader>
-          </Card>
+          <StatCard
+            label="Valor del inventario"
+            value={summary?.valuation ? formatMoney(summary.valuation) : '—'}
+            icon={Wallet}
+            delay={80}
+          />
         )}
       </div>
 
-      <div className="flex flex-wrap gap-3 rounded-lg border bg-card p-4">
+      <div className="flex flex-wrap gap-3 rounded-xl border-[1.5px] border-black/12 bg-card p-4 dark:border-white/15">
         <div className="relative min-w-56 flex-1">
           <Search
             className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
@@ -221,21 +206,6 @@ export function StockPage() {
             aria-label="Buscar productos"
           />
         </div>
-
-        {branches.length > 1 && (
-          <Select
-            value={branchId}
-            onChange={(event) => changeBranch(event.target.value)}
-            className="w-48"
-            aria-label="Sucursal"
-          >
-            {branches.map((branch) => (
-              <option key={branch.id} value={branch.id}>
-                {branch.name}
-              </option>
-            ))}
-          </Select>
-        )}
 
         <Select
           value={categoryId}
@@ -282,21 +252,7 @@ export function StockPage() {
         }
       />
 
-      {meta.totalPages > 1 && (
-        <nav className="flex items-center justify-between gap-4" aria-label="Paginación">
-          <p className="text-sm text-muted-foreground">
-            Página {meta.page} de {meta.totalPages} · {meta.total} productos
-          </p>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" disabled={!meta.hasPrev} onClick={() => setPage((p) => p - 1)}>
-              Anterior
-            </Button>
-            <Button variant="outline" size="sm" disabled={!meta.hasNext} onClick={() => setPage((p) => p + 1)}>
-              Siguiente
-            </Button>
-          </div>
-        </nav>
-      )}
+      <Pagination meta={meta} onPageChange={setPage} itemLabel="productos" />
 
       <StockMovementDialog
         open={Boolean(target)}

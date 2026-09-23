@@ -20,7 +20,7 @@ export const Table = forwardRef(({ className, containerClassName, ...props }, re
 Table.displayName = 'Table';
 
 export const TableHeader = forwardRef(({ className, ...props }, ref) => (
-  <thead ref={ref} className={cn('[&_tr]:border-b', className)} {...props} />
+  <thead ref={ref} className={cn('bg-muted/40 [&_tr]:border-b', className)} {...props} />
 ));
 TableHeader.displayName = 'TableHeader';
 

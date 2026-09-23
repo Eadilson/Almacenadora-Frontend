@@ -13,14 +13,32 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { Download, TrendingDown, TrendingUp } from 'lucide-react';
+import {
+  AlertTriangle,
+  Banknote,
+  BarChart3,
+  Boxes,
+  CreditCard,
+  Download,
+  FileText,
+  HandCoins,
+  Package,
+  Percent,
+  Receipt,
+  TrendingUp,
+  Users,
+  Wallet,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button.jsx';
-import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card.jsx';
+import { PageHeader } from '@/components/ui/page-header.jsx';
+import { StatCard } from '@/components/ui/stat-card.jsx';
 import { Alert, AlertDescription } from '@/components/ui/alert.jsx';
 import { ErrorState, PageLoader } from '@/components/feedback/states.jsx';
 import { ChartEmpty, ChartFrame, ChartTooltip } from '@/components/charts/ChartFrame.jsx';
+import { AgingBars } from '@/components/charts/AgingBars.jsx';
 import { SERIES_COLORS } from '@/components/charts/palette';
 import { usePermission } from '@/hooks/usePermission';
+import { useSession } from '@/hooks/useSession';
 import { formatMoney } from '@/lib/money';
 import { formatDate, formatNumber } from '@/lib/format';
 import { RangePicker } from '../components/RangePicker.jsx';
@@ -46,11 +64,13 @@ const TABS = [
  */
 export function ReportsPage() {
   const { can } = usePermission();
+  const { activeBranchId, user } = useSession();
+  const branchId = activeBranchId ?? user?.branches?.[0]?.id;
   const exportReport = useReportExport();
 
   const tabs = TABS.filter((tab) => !tab.permission || can(tab.permission));
   const [tab, setTab] = useState(tabs[0]?.key ?? 'sales');
-  const [range, setRange] = useState(() => ({ ...rangeFor('30d'), branchId: '' }));
+  const [range, setRange] = useState(() => rangeFor('30d'));
 
   // El inventario es una foto de ahora mismo, no algo que ocurrió en un período:
   // el servidor rechaza `from`/`to` para ese reporte porque no significan nada
@@ -61,21 +81,20 @@ export function ReportsPage() {
   const filters = useMemo(
     () => ({
       ...(showDates ? { from: range.from, to: range.to } : {}),
-      branchId: range.branchId || undefined,
+      branchId,
     }),
-    [range, showDates],
+    [branchId, range, showDates],
   );
 
   const { data, isPending, isError, error, refetch } = useReport(tab, filters);
 
   return (
     <div className="space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Reportes</h1>
-        <p className="text-sm text-muted-foreground">
-          Qué se vendió, qué se ganó y qué está parado.
-        </p>
-      </header>
+      <PageHeader
+        title="Reportes"
+        icon={BarChart3}
+        description="Qué se vendió, qué se ganó y qué está parado."
+      />
 
       <nav className="flex flex-wrap gap-1 border-b" aria-label="Reportes">
         {tabs.map((item) => (
@@ -127,36 +146,39 @@ export function ReportsPage() {
 }
 
 /**
- * Tarjeta de indicador.
+ * Tarjeta de indicador de un reporte.
  *
- * @param {{ label: string, value: string, hint?: string, trend?: number|null }} props
+ * Delgado sobre `StatCard` —el mismo bloque que ya usa el panel de inicio—
+ * conservando la firma que ya conocían las veinte llamadas de este archivo
+ * (label/value/hint/trend), con icono y tono ahora elegidos por cada una.
+ *
+ * @param {{ label: string, value: string, hint?: string, trend?: number|null, icon?: React.ComponentType<{className?: string}>, tone?: import('@/components/ui/tone.js').Tone, featured?: boolean, series?: Array<Record<string, number>>, seriesKey?: string, delay?: number }} props
  */
-function Stat({ label, value, hint, trend = null }) {
+function Stat({
+  label,
+  value,
+  hint,
+  trend = null,
+  icon,
+  tone = 'default',
+  featured = false,
+  series,
+  seriesKey,
+  delay = 0,
+}) {
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardDescription>{label}</CardDescription>
-        <CardTitle className="text-2xl">{value}</CardTitle>
-        {(hint || trend !== null) && (
-          <p className="flex items-center gap-1 text-xs text-muted-foreground">
-            {trend !== null && (
-              <>
-                {trend >= 0 ? (
-                  <TrendingUp className="size-3 text-success" aria-hidden="true" />
-                ) : (
-                  <TrendingDown className="size-3 text-destructive" aria-hidden="true" />
-                )}
-                <span className={trend >= 0 ? 'text-success' : 'text-destructive'}>
-                  {trend >= 0 ? '+' : ''}
-                  {(trend / 100).toFixed(1)}%
-                </span>
-              </>
-            )}
-            {hint}
-          </p>
-        )}
-      </CardHeader>
-    </Card>
+    <StatCard
+      label={label}
+      value={value}
+      hint={hint}
+      icon={icon}
+      tone={tone}
+      featured={featured}
+      series={series}
+      seriesKey={seriesKey}
+      delay={delay}
+      trend={trend !== null ? { value: trend, label: '' } : undefined}
+    />
   );
 }
 
@@ -177,13 +199,37 @@ function SalesReport({ data }) {
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Vendido" value={formatMoney(data.totals.total)} />
-        <Stat label="Ventas" value={formatNumber(data.totals.count)} />
-        <Stat label="Ticket promedio" value={formatMoney(data.totals.averageTicket)} />
+        <Stat
+          label="Vendido"
+          value={formatMoney(data.totals.total)}
+          icon={Banknote}
+          featured
+          series={series}
+          seriesKey="total"
+          delay={0}
+        />
+        <Stat label="Ventas" value={formatNumber(data.totals.count)} icon={Receipt} delay={40} />
+        <Stat
+          label="Ticket promedio"
+          value={formatMoney(data.totals.averageTicket)}
+          icon={HandCoins}
+          delay={80}
+        />
         {financial ? (
-          <Stat label="Utilidad" value={formatMoney(data.totals.grossProfit)} />
+          <Stat
+            label="Utilidad"
+            value={formatMoney(data.totals.grossProfit)}
+            icon={TrendingUp}
+            tone="success"
+            delay={120}
+          />
         ) : (
-          <Stat label="Al crédito" value={formatMoney(data.totals.credit)} />
+          <Stat
+            label="Al crédito"
+            value={formatMoney(data.totals.credit)}
+            icon={CreditCard}
+            delay={120}
+          />
         )}
       </div>
 
@@ -293,6 +339,22 @@ function SalesReport({ data }) {
             value: row.total.amount,
           }))}
         />
+
+        {/* Solo tiene sentido comparar sucursales cuando hay más de una: con una
+            sola, la barra única no compara nada, solo repite el total de arriba. */}
+        {data.byBranch.length > 1 && (
+          <div className="lg:col-span-2">
+            <CategoryBars
+              title="Por sucursal"
+              description="Dónde se vendió más en el período."
+              currency={data.currency}
+              rows={data.byBranch.map((/** @type {any} */ row) => ({
+                name: row.name,
+                value: row.total.amount,
+              }))}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -310,13 +372,35 @@ function ProfitReport({ data }) {
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Ingresos" value={formatMoney(data.totals.revenue)} />
-        <Stat label="Costo de lo vendido" value={formatMoney(data.totals.cogs)} />
-        <Stat label="Utilidad bruta" value={formatMoney(data.totals.grossProfit)} />
+        <Stat
+          label="Ingresos"
+          value={formatMoney(data.totals.revenue)}
+          icon={Banknote}
+          featured
+          series={series}
+          seriesKey="revenue"
+          delay={0}
+        />
+        <Stat
+          label="Costo de lo vendido"
+          value={formatMoney(data.totals.cogs)}
+          icon={Package}
+          delay={40}
+        />
+        <Stat
+          label="Utilidad bruta"
+          value={formatMoney(data.totals.grossProfit)}
+          icon={TrendingUp}
+          tone="success"
+          delay={80}
+        />
         <Stat
           label="Margen"
           value={`${(data.totals.marginBasisPoints / 100).toFixed(1)}%`}
           hint="sobre las ventas del período"
+          icon={Percent}
+          tone="primary"
+          delay={120}
         />
       </div>
 
@@ -457,15 +541,29 @@ function InventoryReport({ data }) {
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Productos con existencia" value={formatNumber(data.totals.products)} />
-        <Stat label="Unidades" value={formatNumber(data.totals.units)} />
+        <Stat
+          label="Productos con existencia"
+          value={formatNumber(data.totals.products)}
+          icon={Package}
+          featured
+          delay={0}
+        />
+        <Stat label="Unidades" value={formatNumber(data.totals.units)} icon={Boxes} tone="success" delay={40} />
         {financial && (
           <>
-            <Stat label="Costo del inventario" value={formatMoney(data.totals.valuation)} />
+            <Stat
+              label="Costo del inventario"
+              value={formatMoney(data.totals.valuation)}
+              icon={Wallet}
+              delay={80}
+            />
             <Stat
               label="Utilidad potencial"
               value={formatMoney(data.totals.potentialProfit)}
               hint="si se vendiera todo al precio de lista"
+              icon={TrendingUp}
+              tone="primary"
+              delay={120}
             />
           </>
         )}
@@ -572,17 +670,68 @@ function RotationReport({ data }) {
   );
 }
 
+/** Etiquetas de los tramos de antigüedad, en el orden en que llegan del servidor. */
+const AGING_LABELS = {
+  current: 'Por vencer',
+  d1_30: '1 a 30 días',
+  d31_60: '31 a 60 días',
+  d61_90: '61 a 90 días',
+  d90_plus: 'Más de 90 días',
+};
+
 /** @param {{ data: any }} props */
 function CustomersReport({ data }) {
   return (
     <div className="space-y-6">
       {data.portfolio && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat label="Por cobrar" value={formatMoney(data.portfolio.balance)} />
-          <Stat label="En mora" value={formatMoney(data.portfolio.overdue)} />
-          <Stat label="Clientes con deuda" value={formatNumber(data.portfolio.accounts)} />
-          <Stat label="En mora" value={formatNumber(data.portfolio.overdueAccounts)} />
-        </div>
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Stat
+              label="Por cobrar"
+              value={formatMoney(data.portfolio.balance)}
+              icon={Wallet}
+              featured
+              delay={0}
+            />
+            <Stat
+              label="En mora"
+              value={formatMoney(data.portfolio.overdue)}
+              icon={AlertTriangle}
+              tone={data.portfolio.overdue.amount > 0 ? 'destructive' : 'primary'}
+              delay={40}
+            />
+            <Stat
+              label="Clientes con deuda"
+              value={formatNumber(data.portfolio.accounts)}
+              icon={Users}
+              delay={80}
+            />
+            {/* Antes, dos tarjetas seguidas decían "En mora" —una en dinero,
+                otra en cuentas— y solo se distinguían leyendo la cifra. */}
+            <Stat
+              label="Cuentas en mora"
+              value={formatNumber(data.portfolio.overdueAccounts)}
+              icon={AlertTriangle}
+              tone={data.portfolio.overdueAccounts > 0 ? 'destructive' : 'primary'}
+              delay={120}
+            />
+          </div>
+
+          {data.portfolio.aging && (
+            <ChartFrame
+              title="Antigüedad de cartera"
+              description="Cuánto lleva pendiente cada peso, contando desde su vencimiento."
+            >
+              <AgingBars
+                buckets={data.portfolio.aging.map((/** @type {any} */ bucket) => ({
+                  ...bucket,
+                  label: AGING_LABELS[bucket.key] ?? bucket.key,
+                }))}
+                total={data.portfolio.balance.amount}
+              />
+            </ChartFrame>
+          )}
+        </>
       )}
 
       <CategoryBars
@@ -593,18 +742,44 @@ function CustomersReport({ data }) {
           name: row.name,
           value: row.total.amount,
         }))}
+        table={{
+          columns: [
+            { key: 'name', label: 'Cliente' },
+            { key: 'purchasesText', label: 'Compras' },
+            { key: 'totalText', label: 'Total' },
+            { key: 'lastText', label: 'Última compra' },
+          ],
+          rows: data.topCustomers.slice(0, 10).map((/** @type {any} */ row) => ({
+            name: row.name,
+            purchasesText: formatNumber(row.purchases),
+            totalText: formatMoney(row.total),
+            lastText: row.lastPurchaseAt ? formatDate(row.lastPurchaseAt) : '—',
+          })),
+        }}
       />
     </div>
   );
 }
+
+/** Etiquetas del tipo de movimiento, igual que en Inventario › Movimientos. */
+const MOVEMENT_TYPE_LABELS = {
+  OPENING_BALANCE: 'Saldo inicial',
+  PURCHASE: 'Compras',
+  SALE: 'Ventas',
+  ADJUSTMENT_IN: 'Ajustes de entrada',
+  ADJUSTMENT_OUT: 'Ajustes de salida',
+  LOSS: 'Pérdidas',
+  SALE_RETURN: 'Devoluciones de cliente',
+  PURCHASE_RETURN: 'Devoluciones a proveedor',
+};
 
 /** @param {{ data: any }} props */
 function PurchasesReport({ data }) {
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2">
-        <Stat label="Comprado" value={formatMoney(data.totals.total)} />
-        <Stat label="Órdenes" value={formatNumber(data.totals.count)} />
+        <Stat label="Comprado" value={formatMoney(data.totals.total)} icon={Banknote} featured delay={0} />
+        <Stat label="Órdenes" value={formatNumber(data.totals.count)} icon={FileText} tone="success" delay={40} />
       </div>
 
       <CategoryBars
@@ -615,7 +790,50 @@ function PurchasesReport({ data }) {
           name: row.name,
           value: row.total.amount,
         }))}
+        table={{
+          columns: [
+            { key: 'name', label: 'Proveedor' },
+            { key: 'ordersText', label: 'Órdenes' },
+            { key: 'totalText', label: 'Total' },
+            { key: 'lastText', label: 'Última compra' },
+          ],
+          rows: data.bySupplier.slice(0, 10).map((/** @type {any} */ row) => ({
+            name: row.name,
+            ordersText: formatNumber(row.orders),
+            totalText: formatMoney(row.total),
+            lastText: row.lastPurchaseAt ? formatDate(row.lastPurchaseAt) : '—',
+          })),
+        }}
       />
+
+      {/* Las compras entran al inventario junto con ajustes, pérdidas y
+          devoluciones: verlas aparte de esos otros movimientos daría una
+          idea incompleta de qué está moviendo las existencias en el período. */}
+      {data.movementsByType.length > 0 && (
+        <CategoryBars
+          title="Movimientos de inventario"
+          description="Qué tipo de movimiento generó más valor en el período."
+          currency={data.currency}
+          rows={data.movementsByType.map((/** @type {any} */ row) => ({
+            name: MOVEMENT_TYPE_LABELS[row.type] ?? row.type,
+            value: row.value.amount,
+          }))}
+          table={{
+            columns: [
+              { key: 'name', label: 'Tipo' },
+              { key: 'countText', label: 'Movimientos' },
+              { key: 'quantityText', label: 'Unidades' },
+              { key: 'valueText', label: 'Valor' },
+            ],
+            rows: data.movementsByType.map((/** @type {any} */ row) => ({
+              name: MOVEMENT_TYPE_LABELS[row.type] ?? row.type,
+              countText: formatNumber(row.count),
+              quantityText: formatNumber(row.quantity),
+              valueText: formatMoney(row.value),
+            })),
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -633,8 +851,12 @@ function PurchasesReport({ data }) {
  * @param {string} props.currency
  * @param {{ name: string, value: number }[]} props.rows
  * @param {'money'|'number'} [props.unit]
+ * @param {{ columns: { key: string, label: string }[], rows: Record<string, any>[] }} [props.table]
+ *   Tabla propia para «Ver datos», cuando el dato tiene más columnas que
+ *   nombre y total (compras, última fecha…). Sin ella, se arma la tabla de
+ *   dos columnas por defecto a partir de `rows`.
  */
-function CategoryBars({ title, description, currency, rows, unit = 'money' }) {
+function CategoryBars({ title, description, currency, rows, unit = 'money', table }) {
   const format = (/** @type {number} */ value) =>
     unit === 'money' ? formatMoney({ amount: value, currency }) : formatNumber(value);
 
@@ -642,13 +864,15 @@ function CategoryBars({ title, description, currency, rows, unit = 'money' }) {
     <ChartFrame
       title={title}
       description={description}
-      table={{
-        columns: [
-          { key: 'name', label: 'Concepto' },
-          { key: 'valueText', label: 'Total' },
-        ],
-        rows: rows.map((row) => ({ name: row.name, valueText: format(row.value) })),
-      }}
+      table={
+        table ?? {
+          columns: [
+            { key: 'name', label: 'Concepto' },
+            { key: 'valueText', label: 'Total' },
+          ],
+          rows: rows.map((row) => ({ name: row.name, valueText: format(row.value) })),
+        }
+      }
     >
       {rows.length === 0 ? (
         <ChartEmpty />

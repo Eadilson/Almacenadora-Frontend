@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -20,6 +20,7 @@ import { FormField } from '@/components/forms/FormField.jsx';
 import { MoneyInput } from '@/components/forms/MoneyInput.jsx';
 import { useSession } from '@/hooks/useSession';
 import { parseMoneyInput } from '@/lib/money';
+import { applyServerErrors } from '@/lib/applyServerErrors';
 import { useInventoryMutations } from '../hooks/useInventory.js';
 
 /**
@@ -110,8 +111,13 @@ export function StockMovementDialog({
     },
   });
 
+  const [saveError, setSaveError] = useState('');
+
   // Al abrir para otro producto, el formulario debe empezar limpio: conservar lo
   // escrito antes provocaría registrar una cantidad en el producto equivocado.
+  // El mismo diálogo se reutiliza para productos distintos, así que un error
+  // de un intento fallido también debe limpiarse, o se queda visible sobre el
+  // producto equivocado.
   useEffect(() => {
     if (open) {
       form.reset({
@@ -121,6 +127,7 @@ export function StockMovementDialog({
         reason: '',
         notes: '',
       });
+      setSaveError('');
     }
   }, [open, product?.id, hasMovements, form]);
 
@@ -160,20 +167,20 @@ export function StockMovementDialog({
     } catch (error) {
       const apiError = /** @type {any} */ (error);
 
-      if (apiError?.isValidation) {
-        for (const [field, message] of Object.entries(apiError.toFormErrors())) {
-          form.setError(/** @type {any} */ (field), { message: /** @type {string} */ (message) });
-        }
-        return;
-      }
-
       // Existencias insuficientes es la respuesta más frecuente aquí: se coloca
       // sobre el campo de cantidad, que es donde el usuario debe corregir.
       if (apiError?.code === 'INSUFFICIENT_STOCK') {
         form.setError('quantity', {
           message: `Solo hay ${apiError.meta?.available ?? '0'} disponibles.`,
         });
+        return;
       }
+
+      // Cualquier otro error —incluido uno que no señale ningún campo real—
+      // se muestra en `saveError` en vez de callarse.
+      applyServerErrors(form, apiError, setSaveError, {
+        fallbackMessage: 'No se pudo registrar el movimiento. Inténtelo de nuevo.',
+      });
     }
   });
 
@@ -281,6 +288,12 @@ export function StockMovementDialog({
               ambos quedan visibles.
             </AlertDescription>
           </Alert>
+
+          {saveError && (
+            <Alert variant="destructive">
+              <AlertDescription>{saveError}</AlertDescription>
+            </Alert>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

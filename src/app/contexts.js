@@ -25,7 +25,9 @@ export const ThemeContext = createContext(null);
  * @property {import('@/api/endpoints/auth').SessionTenant|null} tenant
  * @property {(credentials: { email: string, password: string, remember?: boolean }) => Promise<void>} login
  * @property {() => Promise<void>} logout
+ * @property {() => Promise<void>} logoutAllSessions
  * @property {() => Promise<void>} reload
+ * @property {(payload: { name: string }) => Promise<void>} updateProfile
  * @property {(permission: string) => boolean} can
  * @property {(feature: string) => boolean} hasFeature
  * @property {string|null} activeBranchId

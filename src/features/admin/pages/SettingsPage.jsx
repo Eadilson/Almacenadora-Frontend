@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Building2, Info, Plus, Star } from 'lucide-react';
+import { Building2, Info, Plus, Settings, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button.jsx';
 import { Input } from '@/components/ui/input.jsx';
 import { Select } from '@/components/ui/select.jsx';
 import { Badge } from '@/components/ui/badge.jsx';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card.jsx';
+import { PageHeader } from '@/components/ui/page-header.jsx';
 import { Alert, AlertDescription } from '@/components/ui/alert.jsx';
 import { Separator } from '@/components/ui/separator.jsx';
 import { FormField } from '@/components/forms/FormField.jsx';
@@ -110,12 +111,11 @@ export function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Configuración</h1>
-        <p className="text-sm text-muted-foreground">
-          Datos de la empresa, sucursales y cómo se comporta el sistema al vender.
-        </p>
-      </header>
+      <PageHeader
+        title="Configuración"
+        icon={Settings}
+        description="Datos de la empresa, sucursales y cómo se comporta el sistema al vender."
+      />
 
       <Card>
         <CardHeader>

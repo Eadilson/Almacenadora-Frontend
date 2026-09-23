@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input.jsx';
 import { Select } from '@/components/ui/select.jsx';
 import { Badge } from '@/components/ui/badge.jsx';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card.jsx';
+import { PageHeader } from '@/components/ui/page-header.jsx';
 import { Alert, AlertDescription } from '@/components/ui/alert.jsx';
 import { Separator } from '@/components/ui/separator.jsx';
 import { FormField } from '@/components/forms/FormField.jsx';
@@ -16,6 +17,7 @@ import { usePermission } from '@/hooks/usePermission';
 import { useSession } from '@/hooks/useSession';
 import { AttributeForm } from '../components/AttributeForm.jsx';
 import { useCatalogMutations, useCategories } from '../hooks/useCatalog.js';
+import { applyServerErrors } from '@/lib/applyServerErrors';
 
 const TRACKING_LABELS = {
   NONE: { label: 'Por cantidad', hint: 'Solo se cuentan unidades.' },
@@ -54,6 +56,7 @@ export function CategoriesPage() {
   const [selectedId, setSelectedId] = useState(/** @type {string|null} */ (null));
   const [creatingCategory, setCreatingCategory] = useState(false);
   const [addingAttribute, setAddingAttribute] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   const selected = categories.find((category) => category.id === selectedId) ?? categories[0] ?? null;
   const canManage = can('products:update');
@@ -70,14 +73,9 @@ export function CategoriesPage() {
       setCreatingCategory(false);
       form.reset();
     } catch (mutationError) {
-      const apiError = /** @type {any} */ (mutationError);
-      if (apiError?.isValidation) {
-        for (const [field, message] of Object.entries(apiError.toFormErrors())) {
-          form.setError(/** @type {any} */ (field), { message: /** @type {string} */ (message) });
-        }
-      } else {
-        form.setError('name', { message: apiError.message });
-      }
+      applyServerErrors(form, /** @type {any} */ (mutationError), setSaveError, {
+        fallbackMessage: 'No se pudo crear la categoría. Inténtelo de nuevo.',
+      });
     }
   });
 
@@ -86,22 +84,28 @@ export function CategoriesPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Categorías</h1>
-          <p className="max-w-2xl text-sm text-muted-foreground">
+      <PageHeader
+        title="Categorías"
+        icon={Tag}
+        description={
+          <>
             Cada categoría define qué datos se piden al registrar un producto. Así el sistema se
             adapta a {tenant?.tradeName ?? 'su negocio'} sin necesidad de programar nada.
-          </p>
-        </div>
-
+          </>
+        }
+      >
         {can('products:create') && !creatingCategory && (
-          <Button onClick={() => setCreatingCategory(true)}>
+          <Button
+            onClick={() => {
+              setSaveError('');
+              setCreatingCategory(true);
+            }}
+          >
             <Plus aria-hidden="true" />
             Nueva categoría
           </Button>
         )}
-      </header>
+      </PageHeader>
 
       {creatingCategory && (
         <Card>
@@ -168,6 +172,12 @@ export function CategoriesPage() {
                 </Button>
               </div>
             </form>
+
+            {saveError && (
+              <Alert variant="destructive" className="mt-3">
+                <AlertDescription>{saveError}</AlertDescription>
+              </Alert>
+            )}
           </CardContent>
         </Card>
       )}
@@ -244,8 +254,15 @@ export function CategoriesPage() {
                     saving={addAttribute.isPending}
                     onCancel={() => setAddingAttribute(false)}
                     onSubmit={async (definition) => {
-                      await addAttribute.mutateAsync({ categoryId: selected.id, definition });
-                      setAddingAttribute(false);
+                      try {
+                        await addAttribute.mutateAsync({ categoryId: selected.id, definition });
+                        setAddingAttribute(false);
+                      } catch {
+                        // El aviso ya lo puso el toast de la mutación (clave repetida,
+                        // categoría con productos que exigirían un valor por defecto…);
+                        // aquí solo se evita que el rechazo quede sin capturar y el
+                        // formulario se cierre como si hubiera guardado.
+                      }
                     }}
                   />
                 )}

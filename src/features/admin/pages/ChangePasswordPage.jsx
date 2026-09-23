@@ -4,6 +4,7 @@ import { KeyRound, TriangleAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button.jsx';
 import { Input } from '@/components/ui/input.jsx';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card.jsx';
+import { PageHeader } from '@/components/ui/page-header.jsx';
 import { Alert, AlertDescription } from '@/components/ui/alert.jsx';
 import { FormField } from '@/components/forms/FormField.jsx';
 import { useSession } from '@/hooks/useSession';
@@ -66,12 +67,11 @@ export function ChangePasswordPage() {
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Cambiar contraseña</h1>
-        <p className="text-sm text-muted-foreground">
-          Elija una que solo usted conozca.
-        </p>
-      </header>
+      <PageHeader
+        title="Cambiar contraseña"
+        icon={KeyRound}
+        description="Elija una que solo usted conozca."
+      />
 
       {forced && (
         <Alert variant="warning">

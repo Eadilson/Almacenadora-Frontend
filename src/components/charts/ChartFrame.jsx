@@ -24,10 +24,10 @@ export function ChartFrame({ title, description, series = [], children, table, a
   const tableId = useId();
 
   return (
-    <section className="space-y-3 rounded-lg border bg-card p-4">
+    <section className="space-y-3 rounded-2xl border border-border bg-card p-5 shadow-[0_12px_30px_-24px_rgb(15_23_42/0.45)]">
       <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-0.5">
-          <h3 className="text-sm font-medium">{title}</h3>
+        <div className="space-y-1">
+          <h3 className="text-base font-semibold text-card-foreground">{title}</h3>
           {description && <p className="text-xs text-muted-foreground">{description}</p>}
         </div>
 
@@ -151,7 +151,7 @@ export function ChartTooltip({ active, payload, label, format }) {
  */
 export function ChartEmpty({ label = 'Sin datos en este período.' }) {
   return (
-    <div className="flex h-56 items-center justify-center text-sm text-muted-foreground">
+    <div className="flex h-52 items-center justify-center text-sm text-muted-foreground">
       {label}
     </div>
   );

@@ -33,6 +33,35 @@ puede entrar con las credenciales que ese comando imprime.
 | `npm test` | Pruebas |
 | `npm run lint` | ESLint |
 | `npm run verify` | lint + pruebas + build. **Lo que debe pasar antes de un commit** |
+| `npm run test:ui` | Pruebas Playwright contra backend y frontend ya levantados |
+
+## Verificación local y CI
+
+Antes de abrir un PR o mezclar cambios:
+
+```bash
+npm ci
+npm run verify
+```
+
+El repositorio incluye CI en `.github/workflows/ci.yml` con la misma puerta de
+calidad: instalación reproducible con `npm ci` y ejecución de `npm run verify`
+en Node.js 20.
+
+Las pruebas de interfaz (`npm run test:ui`) son una red adicional para flujos de
+negocio completos. Requieren que backend y frontend estén corriendo, por eso no
+se ejecutan todavía en cada push; deben correrse antes de releases o cambios
+grandes de navegación, formularios o permisos.
+
+Las credenciales de prueba no viven en el repositorio. Antes de ejecutar
+Playwright, expórtelas únicamente en la sesión local o en el gestor de secretos
+del CI:
+
+```bash
+E2E_EMAIL=usuario-de-pruebas@empresa.local \
+E2E_PASSWORD='contraseña-de-pruebas' \
+npm run test:ui
+```
 
 ### Por qué hay un proxy en desarrollo
 

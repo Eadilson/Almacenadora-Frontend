@@ -39,7 +39,7 @@ test.describe('venta al crédito y cobranza', () => {
     const sku = page.getByLabel(/Código \(SKU\)/);
     await sku.waitFor({ state: 'visible', timeout: 20_000 });
 
-    await sku.fill(datos.sku);
+    // El campo lo asigna el servidor: está bloqueado, no se escribe.
     await page.getByLabel(/^Nombre/).fill(datos.producto);
     await page.getByLabel(/^Categoría/).selectOption({ label: 'General' });
     await page.getByLabel(/Unidad de medida/).selectOption({ label: 'Unidad (UN)' });
@@ -47,6 +47,12 @@ test.describe('venta al crédito y cobranza', () => {
     await page.getByLabel(/Precio de venta/).fill(datos.precio);
     await page.getByRole('button', { name: 'Crear producto' }).click();
     await expect(page).toHaveURL(/\/productos\/[a-f0-9]{24}/, { timeout: 20_000 });
+    await esperarCarga(page);
+
+    // El servidor generó el código: se toma el real y se reutiliza en el resto
+    // de la prueba en vez del que se hubiera escrito a mano.
+    datos.sku = await sku.inputValue();
+    expect(datos.sku).toMatch(/^PROD-\d{6}$/);
 
     // ── Existencia inicial ───────────────────────────────────────────────────
     await page.goto('/existencias');
@@ -87,7 +93,8 @@ test.describe('venta al crédito y cobranza', () => {
 
     const dialogoCliente = page.getByRole('dialog');
     await dialogoCliente.getByLabel(/^Nombre/).fill(datos.cliente);
-    await dialogoCliente.getByText('Permitir compras a crédito').click();
+    // Sin interruptor aparte: un límite mayor que cero ya es un cliente con
+    // crédito.
     await dialogoCliente.getByLabel(/Límite de crédito/).fill('5000.00');
     await dialogoCliente.getByLabel(/^Plazo/).fill('30');
     await dialogoCliente.getByRole('button', { name: 'Crear cliente' }).click();

@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { z } from 'zod';
-import { ArrowLeft, Info, Save, Trash2 } from 'lucide-react';
+import { ArrowLeft, Info, Package, Save, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button.jsx';
 import { Input } from '@/components/ui/input.jsx';
 import { Select } from '@/components/ui/select.jsx';
@@ -16,7 +16,8 @@ import { MoneyInput } from '@/components/forms/MoneyInput.jsx';
 import { ErrorState, PageLoader } from '@/components/feedback/states.jsx';
 import { useSession } from '@/hooks/useSession';
 import { usePermission } from '@/hooks/usePermission';
-import { parseMoneyInput, toMajorString } from '@/lib/money';
+import { formatMoney, parseMoneyInput, toMajorString } from '@/lib/money';
+import { applyServerErrors } from '@/lib/applyServerErrors';
 import { DynamicAttributeField } from '../components/DynamicAttributeField.jsx';
 import {
   buildAttributeDefaults,
@@ -33,15 +34,17 @@ import {
 
 /** Campos comunes a cualquier rubro. */
 const baseSchema = z.object({
+  // Vacío es válido al crear: el servidor sugiere un código correlativo cuando
+  // no se indica uno propio. Al editar siempre trae valor, porque viene
+  // precargado del producto y el campo está deshabilitado.
   sku: z
     .string()
     .trim()
-    .min(1, 'El código es obligatorio.')
     .max(40, 'El código admite hasta 40 caracteres.')
-    .regex(
-      /^[A-Za-z0-9][A-Za-z0-9._-]*$/,
-      'Use letras, números, punto, guion o guion bajo (por ejemplo: ANI-0042).',
-    ),
+    .optional()
+    .refine((value) => !value || /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value), {
+      message: 'Use letras, números, punto, guion o guion bajo (por ejemplo: PROD-000042).',
+    }),
   name: z.string().trim().min(1, 'El nombre es obligatorio.').max(160),
   description: z.string().trim().max(2000).optional().default(''),
   brand: z.string().trim().max(60).optional().default(''),
@@ -75,6 +78,12 @@ export function ProductFormPage() {
   const { data: units = [], isPending: loadingUnits } = useUnits();
   const { data: product, isPending: loadingProduct, isError, error } = useProduct(id ?? null);
   const { createProduct, updateProduct, deactivateProduct } = useCatalogMutations();
+
+  // Un rechazo que no es de ningún campo concreto —un permiso, un conflicto,
+  // lo que sea— no tiene dónde colocarse sobre el formulario. Antes se ponía
+  // sobre el código, pero ese campo está bloqueado al editar: el aviso quedaba
+  // en un control que nadie mira, y guardar parecía no hacer nada.
+  const [saveError, setSaveError] = useState('');
 
   // El validador cambia con la categoría, pero `useForm` se declara antes de saber
   // cuál está elegida. Se le pasa un resolver estable que delega en el vigente:
@@ -142,8 +151,22 @@ export function ProductFormPage() {
 
   const selectedUnit = units.find((unit) => unit.id === form.watch('unitId'));
 
+  // Vista previa en vivo: los mismos campos que ya se escriben, leídos para
+  // mostrar cómo se va a ver el producto en el catálogo — no otra fuente de
+  // datos, ni otro cálculo de margen que el que ya hace el servidor.
+  const previewName = form.watch('name');
+  const previewSku = form.watch('sku');
+  const previewCategoryName = categories.find((category) => category.id === categoryId)?.name;
+  const previewCost = parseMoneyInput(form.watch('cost'), currency);
+  const previewPrice = parseMoneyInput(form.watch('salePrice'), currency);
+  const previewMarginBasisPoints =
+    previewCost && previewPrice && previewPrice.amount > 0
+      ? Math.round(((previewPrice.amount - previewCost.amount) / previewPrice.amount) * 10_000)
+      : null;
+
   /** @param {Record<string, any>} values */
   const onSubmit = async (values) => {
+    setSaveError('');
     const cost = parseMoneyInput(values.cost, currency);
     const salePrice = parseMoneyInput(values.salePrice, currency);
 
@@ -157,7 +180,9 @@ export function ProductFormPage() {
     }
 
     const payload = {
-      sku: values.sku.trim().toUpperCase(),
+      // Vacío se omite del todo, no se manda como cadena vacía: es lo que le dice
+      // al servidor que sugiera el siguiente código correlativo.
+      ...(values.sku?.trim() ? { sku: values.sku.trim().toUpperCase() } : {}),
       name: values.name.trim(),
       description: values.description?.trim() || '',
       brand: values.brand?.trim() || null,
@@ -172,9 +197,12 @@ export function ProductFormPage() {
 
     try {
       if (isEditing) {
-        // El código no se envía al editar: cambiarlo rompería las referencias del
-        // historial de ventas y del kardex.
-        const { sku: _sku, ...changes } = payload;
+        // El código y la unidad no se envían al editar: cambiar cualquiera de
+        // los dos dejaría sin sentido las cantidades que el historial de
+        // ventas y el kardex ya registraron con la unidad original. El
+        // servidor los rechaza si llegan — antes llegaban igual, y como el
+        // rechazo no señalaba un campo real, guardar parecía no hacer nada.
+        const { sku: _sku, unitId: _unitId, ...changes } = payload;
         await updateProduct.mutateAsync({ id: /** @type {string} */ (id), changes });
       } else {
         const created = await createProduct.mutateAsync(payload);
@@ -184,20 +212,12 @@ export function ProductFormPage() {
       navigate('/productos');
     } catch (mutationError) {
       // Los errores por campo del servidor se colocan sobre cada control, incluidos
-      // los de atributos del rubro (`attributes.material`).
-      const apiError = /** @type {any} */ (mutationError);
-
-      if (apiError?.isValidation) {
-        for (const [field, message] of Object.entries(apiError.toFormErrors())) {
-          form.setError(/** @type {any} */ (field), { message: /** @type {string} */ (message) });
-        }
-      } else {
-        // Lo inesperado se muestra en lugar de callarse: en silencio, el
-        // formulario se queda quieto sin decir por qué y parece que no reaccionó.
-        form.setError('sku', {
-          message: apiError?.message ?? 'No se pudo guardar el producto. Inténtelo de nuevo.',
-        });
-      }
+      // los de atributos del rubro (`attributes.material`). Lo que no señala
+      // ningún control real (una clave de cuerpo completo, o cualquier fallo
+      // que no sea de validación) se muestra en `saveError` en su lugar.
+      applyServerErrors(form, /** @type {any} */ (mutationError), setSaveError, {
+        fallbackMessage: 'No se pudo guardar el producto. Inténtelo de nuevo.',
+      });
     }
   };
 
@@ -208,7 +228,7 @@ export function ProductFormPage() {
   const errors = form.formState.errors;
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
           <Button variant="ghost" size="sm" className="-ml-3" asChild>
@@ -249,7 +269,8 @@ export function ProductFormPage() {
         </Alert>
       )}
 
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6" noValidate>
+      <div className="grid gap-6 lg:grid-cols-3">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 lg:col-span-2" noValidate>
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Identificación</CardTitle>
@@ -258,17 +279,23 @@ export function ProductFormPage() {
             <FormField
               name="sku"
               label="Código (SKU)"
-              required
               error={errors.sku?.message}
-              hint={isEditing ? 'No se puede cambiar: el historial lo referencia.' : undefined}
+              hint={
+                isEditing
+                  ? 'No se puede cambiar: el historial lo referencia.'
+                  : 'Se asigna solo, correlativo, al guardar.'
+              }
             >
               {({ id: fieldId, invalid, describedBy }) => (
                 <Input
                   id={fieldId}
                   invalid={invalid}
                   aria-describedby={describedBy}
-                  disabled={isEditing}
-                  placeholder="ANI-0042"
+                  // Bloqueado siempre, no solo al editar: escribir uno a mano
+                  // abriría la puerta a duplicados y a un formato inconsistente
+                  // que después nadie corrige. El correlativo lo pone el servidor.
+                  disabled
+                  placeholder={isEditing ? undefined : 'Se genera al guardar'}
                   className="font-mono uppercase"
                   autoComplete="off"
                   {...form.register('sku')}
@@ -276,13 +303,22 @@ export function ProductFormPage() {
               )}
             </FormField>
 
-            <FormField name="barcode" label="Código de barras" error={errors.barcode?.message}>
+            <FormField
+              name="barcode"
+              label="Código de barras"
+              error={errors.barcode?.message}
+              hint={
+                isEditing
+                  ? undefined
+                  : 'Si el producto no trae uno de fábrica, se sugiere uno al guardar.'
+              }
+            >
               {({ id: fieldId, invalid, describedBy }) => (
                 <Input
                   id={fieldId}
                   invalid={invalid}
                   aria-describedby={describedBy}
-                  placeholder="7501234567890"
+                  placeholder={isEditing ? undefined : 'El de fábrica, o vacío para uno interno'}
                   className="font-mono"
                   autoComplete="off"
                   {...form.register('barcode')}
@@ -373,11 +409,13 @@ export function ProductFormPage() {
               required
               error={errors.unitId?.message}
               hint={
-                selectedUnit
-                  ? selectedUnit.isDiscrete
-                    ? 'Solo cantidades enteras.'
-                    : `Admite ${selectedUnit.decimalPlaces} decimales.`
-                  : undefined
+                isEditing
+                  ? 'No se puede cambiar: las cantidades ya registradas quedarían en otra unidad.'
+                  : selectedUnit
+                    ? selectedUnit.isDiscrete
+                      ? 'Solo cantidades enteras.'
+                      : `Admite ${selectedUnit.decimalPlaces} decimales.`
+                    : undefined
               }
             >
               {({ id: fieldId, invalid, describedBy }) => (
@@ -385,7 +423,7 @@ export function ProductFormPage() {
                   id={fieldId}
                   invalid={invalid}
                   aria-describedby={describedBy}
-                  disabled={loadingUnits}
+                  disabled={loadingUnits || isEditing}
                   {...form.register('unitId')}
                 >
                   <option value="">Seleccione…</option>
@@ -508,7 +546,18 @@ export function ProductFormPage() {
           </CardContent>
         </Card>
 
-        <div className="flex justify-end gap-3">
+        {saveError && (
+          <Alert variant="destructive">
+            <AlertDescription>{saveError}</AlertDescription>
+          </Alert>
+        )}
+
+        {/*
+          Fija abajo, no al final de un formulario largo: nadie debería tener
+          que bajar hasta el final para encontrar el botón que ya sabe que va
+          a pulsar.
+        */}
+        <div className="sticky bottom-0 flex justify-end gap-3 border-t bg-background/95 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
           <Button type="button" variant="outline" onClick={() => navigate('/productos')}>
             Cancelar
           </Button>
@@ -518,6 +567,52 @@ export function ProductFormPage() {
           </Button>
         </div>
       </form>
+
+      {/*
+        La misma tarjeta que ya se usa en la vista de catálogo, con los
+        valores que se están escribiendo: así se ve el resultado antes de
+        guardar, no después. Se oculta en pantallas angostas, donde el
+        espacio vertical ya lo ocupa el formulario.
+      */}
+      <aside className="hidden lg:col-span-1 lg:block">
+        <div className="sticky top-20 space-y-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Así se ve en el catálogo
+          </p>
+          <Card className="overflow-hidden">
+            <div className="flex aspect-square items-center justify-center bg-muted">
+              <Package className="size-9 text-muted-foreground/30" aria-hidden="true" />
+            </div>
+            <div className="space-y-1.5 p-3">
+              <div className="flex items-start justify-between gap-2">
+                <p className="line-clamp-2 text-sm font-medium leading-snug">
+                  {previewName || 'Nombre del producto'}
+                </p>
+                <Badge variant={isEditing && !product?.isActive ? 'secondary' : 'success'} className="shrink-0">
+                  {isEditing && !product?.isActive ? 'Inactivo' : 'Activo'}
+                </Badge>
+              </div>
+              <p className="truncate font-mono text-xs text-muted-foreground">
+                {previewSku || (isEditing ? '' : 'Código automático')}
+                {previewCategoryName && ` · ${previewCategoryName}`}
+              </p>
+              <div className="flex items-baseline justify-between pt-1">
+                <p className="font-semibold tabular-nums">
+                  {previewPrice ? formatMoney(previewPrice) : '—'}
+                </p>
+                {previewMarginBasisPoints !== null && (
+                  <span
+                    className={`text-xs tabular-nums ${previewMarginBasisPoints < 0 ? 'font-medium text-destructive' : 'text-muted-foreground'}`}
+                  >
+                    {(previewMarginBasisPoints / 100).toFixed(1)}%
+                  </span>
+                )}
+              </div>
+            </div>
+          </Card>
+        </div>
+      </aside>
+      </div>
     </div>
   );
 }

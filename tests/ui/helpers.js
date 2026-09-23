@@ -1,8 +1,8 @@
 import { expect } from '@playwright/test';
 
 export const CREDENCIALES = {
-  email: 'admin@ferreteria.local',
-  password: 'Inventra2026!',
+  email: process.env.E2E_EMAIL ?? '',
+  password: process.env.E2E_PASSWORD ?? '',
 };
 
 /**
@@ -16,6 +16,10 @@ export const CREDENCIALES = {
  */
 export async function entrar(page, credenciales = {}) {
   const { email, password } = { ...CREDENCIALES, ...credenciales };
+
+  if (!email || !password) {
+    throw new Error('Defina E2E_EMAIL y E2E_PASSWORD antes de ejecutar las pruebas de interfaz.');
+  }
 
   await page.goto('/login');
 

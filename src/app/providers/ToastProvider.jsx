@@ -67,7 +67,7 @@ export function ToastProvider({ children }) {
           <div
             key={toast.id}
             className={cn(
-              'pointer-events-auto relative flex gap-3 overflow-hidden rounded-lg border p-4 pr-10 shadow-lg animate-slide-in-right',
+              'pointer-events-auto relative flex gap-3 overflow-hidden rounded-xl border-[1.5px] p-4 pr-10 shadow-card-hover animate-slide-in-right',
               VARIANT_STYLES[toast.variant],
             )}
           >

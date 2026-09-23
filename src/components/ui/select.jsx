@@ -17,8 +17,8 @@ export const Select = forwardRef(({ className, invalid = false, children, ...pro
       ref={ref}
       aria-invalid={invalid || undefined}
       className={cn(
-        'flex h-10 w-full appearance-none rounded-md border border-input bg-background px-3 py-2 pr-9 text-sm',
-        'ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+        'flex h-10 w-full appearance-none rounded-xl border border-input bg-background/85 px-3 py-2 pr-9 text-sm shadow-[inset_0_1px_0_hsl(var(--foreground)/0.04)] transition-[border-color,box-shadow,background-color]',
+        'ring-offset-background hover:border-foreground/25 hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         'disabled:cursor-not-allowed disabled:opacity-50',
         invalid && 'border-destructive focus-visible:ring-destructive',
         className,

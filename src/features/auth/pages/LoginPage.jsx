@@ -9,13 +9,6 @@ import { ApiError } from '@/api/ApiError';
 import { Button } from '@/components/ui/button.jsx';
 import { Input } from '@/components/ui/input.jsx';
 import { Label } from '@/components/ui/label.jsx';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card.jsx';
 import { Alert, AlertDescription } from '@/components/ui/alert.jsx';
 
 /**
@@ -70,11 +63,17 @@ export function LoginPage() {
       }
 
       // Errores de validación del servidor: se marcan sobre el campo concreto.
+      // Uno que no señale ningún campo real de este formulario (`body`/`(raíz)`)
+      // no tiene dónde colocarse: cae al mensaje general en vez de perderse.
       if (error.isValidation) {
-        for (const [field, message] of Object.entries(error.toFormErrors())) {
+        const fieldErrors = error.toFormErrors();
+        let placed = false;
+        for (const [field, message] of Object.entries(fieldErrors)) {
+          if (field === 'body' || field === '(raíz)') continue;
           setError(/** @type {any} */ (field), { type: 'server', message });
+          placed = true;
         }
-        return;
+        if (placed) return;
       }
 
       setFormError(error);
@@ -101,14 +100,18 @@ export function LoginPage() {
     (formError.status >= 500 || ERROR_MESSAGES[formError.code] === undefined);
 
   return (
-    <Card className="w-full max-w-sm">
-      <CardHeader>
-        <CardTitle>Iniciar sesión</CardTitle>
-        <CardDescription>Acceda con las credenciales de su empresa.</CardDescription>
-      </CardHeader>
+    <div className="rounded-[2rem] border border-border bg-card p-6 shadow-[0_1px_2px_-1px_rgb(0_0_0/0.1),0_24px_60px_-46px_rgb(0_0_0/0.7)]">
+      <div className="mb-8">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+          Acceso seguro
+        </p>
+        <h2 className="text-3xl font-semibold tracking-tight">Entrar al sistema</h2>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          Use las credenciales asignadas a su empresa.
+        </p>
+      </div>
 
-      <CardContent>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
           {errorMessage && (
             <Alert variant="destructive">
               <AlertDescription>
@@ -198,7 +201,12 @@ export function LoginPage() {
             {isSubmitting ? 'Verificando…' : 'Entrar'}
           </Button>
         </form>
-      </CardContent>
-    </Card>
+
+      <div className="mt-6 flex items-center justify-between border-t border-border pt-4 text-xs text-muted-foreground">
+        <span>Inventario</span>
+        <span>Ventas</span>
+        <span>Crédito</span>
+      </div>
+    </div>
   );
 }

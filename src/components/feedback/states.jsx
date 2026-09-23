@@ -35,7 +35,7 @@ export function EmptyState({ title, description, icon = Inbox, action, className
   return (
     <div
       className={cn(
-        'flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed p-10 text-center',
+        'flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed bg-card p-10 text-center shadow-[0_12px_30px_-24px_rgb(15_23_42/0.45)]',
         className,
       )}
     >
@@ -67,7 +67,7 @@ export function ErrorState({ error, onRetry, className }) {
   return (
     <div
       className={cn(
-        'flex flex-col items-center justify-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-10 text-center',
+        'flex flex-col items-center justify-center gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 p-10 text-center shadow-[0_12px_30px_-24px_rgb(15_23_42/0.45)]',
         className,
       )}
       role="alert"

@@ -15,12 +15,30 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog.jsx';
 import { Textarea } from '@/components/ui/textarea.jsx';
+import { Alert, AlertDescription } from '@/components/ui/alert.jsx';
+import { Pagination } from '@/components/data/Pagination.jsx';
 import { FormField } from '@/components/forms/FormField.jsx';
 import { usePermission } from '@/hooks/usePermission';
 import { useSession } from '@/hooks/useSession';
+import { useDialogSubmit } from '@/hooks/useDialogSubmit';
 import { formatMoney } from '@/lib/money';
-import { formatDateTime, formatQuantity } from '@/lib/format';
+import { formatDate, formatDateTime, formatQuantity } from '@/lib/format';
 import { useInventoryMutations, useKardex } from '../hooks/useInventory.js';
+
+/**
+ * Cómo nombrar la entrada de la que salió una unidad: su propio documento si
+ * tiene uno (una compra), o su tipo si es de las que no lo tienen (un ajuste,
+ * el saldo inicial).
+ *
+ * @param {{ type: string, typeLabel: string, reference: any } | null} source
+ * @returns {string}
+ */
+function originLabel(source) {
+  if (!source) return 'origen sin registrar';
+  return source.reference?.docNumber
+    ? `${source.typeLabel} ${source.reference.docNumber}`
+    : source.typeLabel;
+}
 
 /**
  * Kardex de un producto.
@@ -35,10 +53,16 @@ export function KardexPage() {
   const { can } = usePermission();
   const { user, activeBranchId } = useSession();
 
-  const branchId = searchParams.get('branchId') ?? activeBranchId ?? user?.branches?.[0]?.id ?? '';
+  const branchId = activeBranchId ?? user?.branches?.[0]?.id ?? searchParams.get('branchId') ?? '';
   const [page, setPage] = useState(1);
   const [correcting, setCorrecting] = useState(/** @type {any} */ (null));
   const [reason, setReason] = useState('');
+  const {
+    error: correctError,
+    clearError: clearCorrectError,
+    submitting: correctSubmitting,
+    run: runCorrect,
+  } = useDialogSubmit();
 
   const { data, isPending, isError, error, refetch } = useKardex(id ?? null, {
     branchId: branchId || undefined,
@@ -54,6 +78,14 @@ export function KardexPage() {
   if (isError) return <ErrorState error={error} onRetry={() => void refetch()} />;
 
   const { product, stock, movements, meta } = data;
+
+  async function submitCorrection() {
+    const ok = await runCorrect(() => correct.mutateAsync({ movementId: correcting.id, reason }));
+    if (!ok) return;
+    setCorrecting(null);
+    setReason('');
+    void refetch();
+  }
 
   const columns = [
     {
@@ -84,6 +116,32 @@ export function KardexPage() {
               <Badge variant="outline" className="mt-0.5 text-[10px]">
                 Corrección
               </Badge>
+            )}
+            {/* De qué entrada salió: solo tiene sentido en una salida, y solo
+                desde que existe esta función — una salida anterior no lleva nada. */}
+            {row.direction === 'OUT' && row.consumedFrom?.length > 0 && (
+              <>
+                {row.consumedFrom.length === 1 ? (
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    De {originLabel(row.consumedFrom[0].source)}
+                    {row.consumedFrom[0].source && ` · ${formatDate(row.consumedFrom[0].source.occurredAt)}`}
+                  </p>
+                ) : (
+                  <details className="mt-0.5">
+                    <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                      De {row.consumedFrom.length} entradas
+                    </summary>
+                    <ul className="mt-1 space-y-0.5 pl-3 text-xs text-muted-foreground">
+                      {row.consumedFrom.map((entry, index) => (
+                        <li key={index}>
+                          {formatQuantity(entry.quantity)} de {originLabel(entry.source)}
+                          {entry.source && ` · ${formatDate(entry.source.occurredAt)}`}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -141,6 +199,10 @@ export function KardexPage() {
                   onClick={() => {
                     setCorrecting(row);
                     setReason('');
+                    // La misma instancia de useDialogSubmit se reutiliza para
+                    // movimientos distintos: sin esto, el error del intento
+                    // anterior seguía visible al abrir el diálogo para este otro.
+                    clearCorrectError();
                   }}
                 >
                   <Undo2 aria-hidden="true" />
@@ -208,21 +270,7 @@ export function KardexPage() {
           emptyDescription="Este producto todavía no tiene existencias registradas en esta sucursal."
         />
 
-        {meta.totalPages > 1 && (
-          <nav className="flex items-center justify-between gap-4" aria-label="Paginación">
-            <p className="text-sm text-muted-foreground">
-              Página {meta.page} de {meta.totalPages}
-            </p>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" disabled={!meta.hasPrev} onClick={() => setPage((p) => p - 1)}>
-                Anterior
-              </Button>
-              <Button variant="outline" size="sm" disabled={!meta.hasNext} onClick={() => setPage((p) => p + 1)}>
-                Siguiente
-              </Button>
-            </div>
-          </nav>
-        )}
+        <Pagination meta={meta} onPageChange={setPage} />
       </section>
 
       {/* Corregir es compensar: el original se conserva siempre. */}
@@ -248,19 +296,21 @@ export function KardexPage() {
             )}
           </FormField>
 
+          {correctError && (
+            <Alert variant="destructive">
+              <AlertDescription>{correctError}</AlertDescription>
+            </Alert>
+          )}
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setCorrecting(null)}>
               Cancelar
             </Button>
             <Button
-              disabled={reason.trim().length < 5 || correct.isPending}
-              onClick={async () => {
-                await correct.mutateAsync({ movementId: correcting.id, reason });
-                setCorrecting(null);
-                void refetch();
-              }}
+              disabled={reason.trim().length < 5 || correct.isPending || correctSubmitting}
+              onClick={() => void submitCorrection()}
             >
-              {correct.isPending ? 'Registrando…' : 'Registrar corrección'}
+              {correct.isPending || correctSubmitting ? 'Registrando…' : 'Registrar corrección'}
             </Button>
           </DialogFooter>
         </DialogContent>

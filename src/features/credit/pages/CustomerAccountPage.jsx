@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Ban, HandCoins, Printer, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Ban, CreditCard, HandCoins, Printer, ShieldCheck, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button.jsx';
 import { Badge } from '@/components/ui/badge.jsx';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card.jsx';
+import { StatCard } from '@/components/ui/stat-card.jsx';
 import { Alert, AlertDescription } from '@/components/ui/alert.jsx';
 import { Separator } from '@/components/ui/separator.jsx';
 import { ErrorState, PageLoader } from '@/components/feedback/states.jsx';
@@ -118,34 +119,26 @@ export function CustomerAccountPage() {
           )}
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardDescription>Debe</CardDescription>
-                <CardTitle className="text-2xl">{formatMoney(account.balance)}</CardTitle>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader className="pb-3">
-                <CardDescription>En mora</CardDescription>
-                <CardTitle
-                  className={`text-2xl ${account.overdueAmount.amount > 0 ? 'text-destructive' : ''}`}
-                >
-                  {formatMoney(account.overdueAmount)}
-                </CardTitle>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader className="pb-3">
-                <CardDescription>Puede llevarse</CardDescription>
-                <CardTitle className="text-2xl">{formatMoney(account.availableCredit)}</CardTitle>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader className="pb-3">
-                <CardDescription>A su favor</CardDescription>
-                <CardTitle className="text-2xl">{formatMoney(account.unappliedCredit)}</CardTitle>
-              </CardHeader>
-            </Card>
+            <StatCard label="Debe" value={formatMoney(account.balance)} icon={Wallet} featured delay={0} />
+            <StatCard
+              label="En mora"
+              value={formatMoney(account.overdueAmount)}
+              icon={Ban}
+              tone={account.overdueAmount.amount > 0 ? 'destructive' : 'default'}
+              delay={40}
+            />
+            <StatCard
+              label="Puede llevarse"
+              value={formatMoney(account.availableCredit)}
+              icon={CreditCard}
+              delay={80}
+            />
+            <StatCard
+              label="A su favor"
+              value={formatMoney(account.unappliedCredit)}
+              icon={HandCoins}
+              delay={120}
+            />
           </div>
 
           {account.unappliedCredit.amount > 0 && (

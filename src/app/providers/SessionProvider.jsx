@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { SessionContext } from '@/app/contexts';
 import { authApi } from '@/api/endpoints/auth';
-import { refreshSession } from '@/api/client';
+import { refreshSession, setActiveBranchContext } from '@/api/client';
 import { clearAccessToken, onSessionChange, setAccessToken } from '@/api/session';
 import { configureFormatting } from '@/lib/format';
 import { StorageKeys, readPreference, writePreference } from '@/lib/storage';
@@ -15,6 +16,7 @@ import { StorageKeys, readPreference, writePreference } from '@/lib/storage';
  * termina en «no autenticado» sin mostrar ningún error, porque no lo es.
  */
 export function SessionProvider({ children }) {
+  const queryClient = useQueryClient();
   /** @type {[import('@/app/contexts').SessionStatus, Function]} */
   const [status, setStatus] = useState('loading');
   const [user, setUser] = useState(null);
@@ -44,6 +46,7 @@ export function SessionProvider({ children }) {
       const valid = branches.some((branch) => branch.id === stored);
       const next = valid ? stored : (branches.find((b) => b.isDefault) ?? branches[0])?.id ?? null;
 
+      setActiveBranchContext(next);
       setActiveBranchId(next);
       if (next) writePreference(StorageKeys.ACTIVE_BRANCH, next);
       setStatus('authenticated');
@@ -53,6 +56,7 @@ export function SessionProvider({ children }) {
 
   const clearSession = useCallback(() => {
     clearAccessToken();
+    setActiveBranchContext(null);
     setUser(null);
     setTenant(null);
     setStatus('unauthenticated');
@@ -92,6 +96,7 @@ export function SessionProvider({ children }) {
     () =>
       onSessionChange((authenticated) => {
         if (!authenticated) {
+          setActiveBranchContext(null);
           setUser(null);
           setTenant(null);
           setStatus('unauthenticated');
@@ -119,15 +124,46 @@ export function SessionProvider({ children }) {
     }
   }, [clearSession]);
 
+  const logoutAllSessions = useCallback(async () => {
+    try {
+      await authApi.logoutAll();
+    } finally {
+      // Esta sesión también cayó en el servidor: el cierre local no es opcional.
+      clearSession();
+    }
+  }, [clearSession]);
+
   const reload = useCallback(async () => {
     const profile = await authApi.profile();
     applySession(profile);
   }, [applySession]);
 
-  const setActiveBranch = useCallback((branchId) => {
-    setActiveBranchId(branchId);
-    writePreference(StorageKeys.ACTIVE_BRANCH, branchId);
-  }, []);
+  const updateProfile = useCallback(
+    /** @param {{ name: string }} payload */
+    async (payload) => {
+      const profile = await authApi.updateProfile(payload);
+      applySession(profile);
+    },
+    [applySession],
+  );
+
+  const setActiveBranch = useCallback(
+    (branchId) => {
+      const allowed = user?.branches?.some((branch) => branch.id === branchId);
+      if (!allowed || branchId === activeBranchId) return;
+
+      // El encabezado cambia antes de reiniciar las consultas: cualquier petición
+      // que nazca durante el cambio ya queda delimitada al nuevo punto de venta.
+      setActiveBranchContext(branchId);
+      setActiveBranchId(branchId);
+      writePreference(StorageKeys.ACTIVE_BRANCH, branchId);
+
+      // Borra los datos visibles del local anterior y vuelve a consultar todas
+      // las vistas activas. No debe existir ni un fotograma con cifras mezcladas.
+      void queryClient.resetQueries();
+    },
+    [activeBranchId, queryClient, user?.branches],
+  );
 
   const can = useCallback(
     (permission) => Boolean(user?.permissions?.includes(permission)),
@@ -146,13 +182,28 @@ export function SessionProvider({ children }) {
       tenant,
       login,
       logout,
+      logoutAllSessions,
       reload,
+      updateProfile,
       can,
       hasFeature,
       activeBranchId,
       setActiveBranch,
     }),
-    [status, user, tenant, login, logout, reload, can, hasFeature, activeBranchId, setActiveBranch],
+    [
+      status,
+      user,
+      tenant,
+      login,
+      logout,
+      logoutAllSessions,
+      reload,
+      updateProfile,
+      can,
+      hasFeature,
+      activeBranchId,
+      setActiveBranch,
+    ],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

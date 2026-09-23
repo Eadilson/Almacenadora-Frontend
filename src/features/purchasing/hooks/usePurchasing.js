@@ -35,12 +35,14 @@ export function useSupplier(id) {
 
 /**
  * @param {Record<string, unknown>} filters
+ * @param {{ enabled?: boolean }} [options]
  */
-export function usePurchaseOrders(filters = {}) {
+export function usePurchaseOrders(filters = {}, { enabled = true } = {}) {
   return useQuery({
     queryKey: queryKeys.purchaseOrders.list(filters),
     queryFn: () => purchasingApi.listOrders(filters),
     placeholderData: (previous) => previous,
+    enabled,
   });
 }
 

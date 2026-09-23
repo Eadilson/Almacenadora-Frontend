@@ -5,7 +5,6 @@ import { NotFoundPage } from './NotFoundPage.jsx';
 import { AppLayout } from '@/layouts/AppLayout.jsx';
 import { AuthLayout } from '@/layouts/AuthLayout.jsx';
 import { LoginPage } from '@/features/auth/pages/LoginPage.jsx';
-import { DashboardPage } from '@/features/dashboard/pages/DashboardPage.jsx';
 import { PageLoader } from '@/components/feedback/states.jsx';
 
 /**
@@ -26,6 +25,11 @@ import { PageLoader } from '@/components/feedback/states.jsx';
 const ProductsPage = lazy(() =>
   import('@/features/catalog/pages/ProductsPage.jsx').then((m) => ({ default: m.ProductsPage })),
 );
+const DashboardPage = lazy(() =>
+  import('@/features/dashboard/pages/DashboardPage.jsx').then((m) => ({
+    default: m.DashboardPage,
+  })),
+);
 const ProductFormPage = lazy(() =>
   import('@/features/catalog/pages/ProductFormPage.jsx').then((m) => ({
     default: m.ProductFormPage,
@@ -45,6 +49,11 @@ const MovementsPage = lazy(() =>
 );
 const SuppliersPage = lazy(() =>
   import('@/features/purchasing/pages/SuppliersPage.jsx').then((m) => ({ default: m.SuppliersPage })),
+);
+const SupplierDetailPage = lazy(() =>
+  import('@/features/purchasing/pages/SupplierDetailPage.jsx').then((m) => ({
+    default: m.SupplierDetailPage,
+  })),
 );
 const PurchaseOrdersPage = lazy(() =>
   import('@/features/purchasing/pages/PurchaseOrdersPage.jsx').then((m) => ({
@@ -73,6 +82,11 @@ const SaleDetailPage = lazy(() =>
 );
 const CustomersPage = lazy(() =>
   import('@/features/sales/pages/CustomersPage.jsx').then((m) => ({ default: m.CustomersPage })),
+);
+const CustomerDetailPage = lazy(() =>
+  import('@/features/sales/pages/CustomerDetailPage.jsx').then((m) => ({
+    default: m.CustomerDetailPage,
+  })),
 );
 
 const PortfolioPage = lazy(() =>
@@ -103,6 +117,9 @@ const ChangePasswordPage = lazy(() =>
   import('@/features/admin/pages/ChangePasswordPage.jsx').then((m) => ({
     default: m.ChangePasswordPage,
   })),
+);
+const ProfilePage = lazy(() =>
+  import('@/features/admin/pages/ProfilePage.jsx').then((m) => ({ default: m.ProfilePage })),
 );
 
 export function AppRoutes() {
@@ -157,6 +174,7 @@ export function AppRoutes() {
 
           <Route element={<RequirePermission permission="purchases:read" />}>
             <Route path="/proveedores" element={<SuppliersPage />} />
+            <Route path="/proveedores/:id" element={<SupplierDetailPage />} />
             <Route path="/compras" element={<PurchaseOrdersPage />} />
             <Route path="/compras/:id" element={<PurchaseOrderDetailPage />} />
           </Route>
@@ -174,6 +192,7 @@ export function AppRoutes() {
 
           <Route element={<RequirePermission permission="customers:read" />}>
             <Route path="/clientes" element={<CustomersPage />} />
+            <Route path="/clientes/:id" element={<CustomerDetailPage />} />
           </Route>
 
           {/* Crédito y cartera. `/abonos` va antes que `/creditos/:customerId`
@@ -205,6 +224,9 @@ export function AppRoutes() {
           {/* Sin guardia de permiso: cualquiera puede cambiar su propia clave, y
               quien llega con una temporal aún no tiene por qué tener ninguno. */}
           <Route path="/cambiar-clave" element={<ChangePasswordPage />} />
+
+          {/* Igual sin guardia de permiso: es la propia cuenta de quien mira. */}
+          <Route path="/perfil" element={<ProfilePage />} />
 
           <Route path="*" element={<NotFoundPage />} />
         </Route>

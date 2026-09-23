@@ -49,6 +49,16 @@ export const authApi = {
   profile: () => api.get('/auth/me').then(unwrap),
 
   /**
+   * Cambia el propio nombre. El correo, el rol y las sucursales no se tocan por
+   * aquí: el correo es la credencial de entrada, y el rol y las sucursales son
+   * decisiones de Administración, no de la propia persona.
+   *
+   * @param {{ name: string }} payload
+   * @returns {Promise<{ user: SessionUser, tenant: SessionTenant }>}
+   */
+  updateProfile: (payload) => api.patch('/auth/me', payload).then(unwrap),
+
+  /**
    * @returns {Promise<{ revoked: boolean }>}
    */
   logout: () => api.post('/auth/logout').then(unwrap),

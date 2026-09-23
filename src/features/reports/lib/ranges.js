@@ -1,3 +1,5 @@
+import { localISODate } from '@/lib/format';
+
 /**
  * Períodos de consulta de los reportes.
  *
@@ -26,7 +28,7 @@ export const PRESETS = [
  */
 export function rangeFor(key) {
   const today = new Date();
-  const iso = (/** @type {Date} */ date) => date.toISOString().slice(0, 10);
+  const iso = localISODate;
 
   if (key === 'month') {
     return { from: iso(new Date(today.getFullYear(), today.getMonth(), 1)), to: iso(today) };

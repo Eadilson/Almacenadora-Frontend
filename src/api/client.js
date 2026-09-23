@@ -23,6 +23,21 @@ const AUTH_ROUTES = ['/auth/login', '/auth/refresh', '/auth/logout'];
 /** @type {Promise<string|null>|null} */
 let refreshInFlight = null;
 
+/** Sucursal que delimita todas las peticiones operativas de la sesión. */
+let activeBranchId = null;
+
+/**
+ * Actualiza el contexto de sucursal que viajará en cada petición autenticada.
+ *
+ * Se mantiene junto al cliente HTTP para que una pantalla nueva quede aislada
+ * por defecto, aunque olvide añadir `branchId` a sus parámetros de consulta.
+ *
+ * @param {string|null|undefined} branchId
+ */
+export function setActiveBranchContext(branchId) {
+  activeBranchId = branchId || null;
+}
+
 /**
  * Renueva la sesión, garantizando **una sola** petición simultánea.
  *
@@ -57,6 +72,12 @@ function refreshSession() {
 api.interceptors.request.use((config) => {
   const token = getAccessToken();
   if (token) config.headers.Authorization = `Bearer ${token}`;
+
+  if (activeBranchId) {
+    config.headers['X-Branch-Id'] = activeBranchId;
+  } else {
+    delete config.headers['X-Branch-Id'];
+  }
 
   // Identificador de correlación generado en el cliente: permite rastrear en los
   // registros del servidor exactamente la petición que el usuario reportó.
