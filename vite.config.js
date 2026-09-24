@@ -26,7 +26,9 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       outDir: 'dist',
-      sourcemap: true,
+      // El código fuente original no se publica por defecto. Se puede habilitar
+      // expresamente para un despliegue privado de diagnóstico.
+      sourcemap: env.VITE_ENABLE_SOURCEMAPS === 'true',
       rollupOptions: {
         output: {
           // Se separan las dependencias que cambian poco para que un despliegue no

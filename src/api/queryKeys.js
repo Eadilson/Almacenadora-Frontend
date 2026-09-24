@@ -71,6 +71,17 @@ export const queryKeys = {
     list: (/** @type {Record<string, unknown>} */ filters) => ['payments', 'list', filters],
     detail: (/** @type {string} */ id) => ['payments', 'detail', id],
   },
+  cash: {
+    all: ['cash'],
+    current: (/** @type {string} */ branchId) => ['cash', 'current', branchId],
+    list: (/** @type {Record<string, unknown>} */ filters) => ['cash', 'list', filters],
+    detail: (/** @type {string} */ id, /** @type {Record<string, unknown>} */ filters) => [
+      'cash',
+      'detail',
+      id,
+      filters,
+    ],
+  },
   reports: {
     all: ['reports'],
     dashboard: (/** @type {Record<string, unknown>} */ range) => ['reports', 'dashboard', range],

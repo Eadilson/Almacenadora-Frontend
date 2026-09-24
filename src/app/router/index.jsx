@@ -100,6 +100,9 @@ const CustomerAccountPage = lazy(() =>
 const PaymentsPage = lazy(() =>
   import('@/features/credit/pages/PaymentsPage.jsx').then((m) => ({ default: m.PaymentsPage })),
 );
+const CashPage = lazy(() =>
+  import('@/features/cash/pages/CashPage.jsx').then((m) => ({ default: m.CashPage })),
+);
 
 const UsersPage = lazy(() =>
   import('@/features/admin/pages/UsersPage.jsx').then((m) => ({ default: m.UsersPage })),
@@ -204,6 +207,10 @@ export function AppRoutes() {
           <Route element={<RequirePermission permission="credit:read" />}>
             <Route path="/creditos" element={<PortfolioPage />} />
             <Route path="/creditos/:customerId" element={<CustomerAccountPage />} />
+          </Route>
+
+          <Route element={<RequirePermission permission="cash:read" />}>
+            <Route path="/caja" element={<CashPage />} />
           </Route>
 
           {/* Reportes */}
